@@ -9,7 +9,7 @@ requests.packages.urllib3.disable_warnings()
 
 # --- Configurações principais ---
 REPO_USER = "Kvsl11"
-REPO_NAME = "cont_hxg"
+REPO_NAME = "Hxg_auto"
 LOCAL_SCRIPT = "main.py"
 LOCAL_VERSION_FILE = "version_local.txt"
 

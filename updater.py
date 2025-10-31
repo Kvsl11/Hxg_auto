@@ -6,7 +6,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 requests.packages.urllib3.disable_warnings()
 
 # --- Configurações principais ---
-REPO = "Kvsl11/cont_hxg"
+REPO = "Kvsl11/Hxg_auto"
 URL_VERSION = f"https://raw.githubusercontent.com/{REPO}/main/version.txt"
 URL_SCRIPT = f"https://raw.githubusercontent.com/{REPO}/main/main.py"
 LOCAL_SCRIPT = "main.py"

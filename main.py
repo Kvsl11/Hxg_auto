@@ -119,8 +119,8 @@ VERSAO = "3.0.0"
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
     try:
-        repo_url = "https://raw.githubusercontent.com/Kvsl11/cont_hxg/main/version.txt"
-        script_url = "https://raw.githubusercontent.com/Kvsl11/cont_hxg/main/main.py"
+        repo_url = "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/version.txt"
+        script_url = "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/main.py"
         versao_local = VERSAO
 
         # Mostra status inicial de verificação

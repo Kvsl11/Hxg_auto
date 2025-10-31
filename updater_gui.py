@@ -11,7 +11,7 @@ requests.packages.urllib3.disable_warnings()
 
 # --- Configurações principais ---
 GITHUB_USER = "Kvsl11"
-REPO_NAME = "cont_hxg"
+REPO_NAME = "Hxg_auto"
 BASE_URL = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/"
 VERSION_FILE = "version.txt"
 SCRIPT_FILE = "main.py"
