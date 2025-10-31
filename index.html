@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baixar — Hxg Auto</title>
+  <style>
+    body {
+      background: #0f1116;
+      color: #e0e6ed;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2em;
+      color: #00bfa5;
+      margin-bottom: 10px;
+    }
+    p {
+      color: #cdd7e0;
+    }
+    a {
+      color: #00bfa5;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .container {
+      padding: 20px 30px;
+      border: 2px solid #00bfa5;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 191, 165, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔽 Iniciando o download...</h1>
+    <p>Seu instalador <strong>CONT_HXG</strong> está sendo baixado.<br>
+    Se o download não iniciar automaticamente, <a id="manual" href="#">clique aqui</a>.</p>
+  </div>
+
+  <script>
+    // Link direto para o arquivo ZIP hospedado no GitHub
+    const zipUrl = "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/hxg_auto_instalador.zip";
+    const fileName = "hxg_auto_instalador.zip";
+
+    // Define link manual
+    document.getElementById("manual").href = zipUrl;
+
+    // Cria e dispara download automático
+    function iniciarDownload() {
+      const link = document.createElement("a");
+      link.href = zipUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Executa automaticamente após 1 segundo
+    window.addEventListener("DOMContentLoaded", () => {
+      setTimeout(iniciarDownload, 1000);
+    });
+  </script>
+</body>
+</html>
