@@ -4,9 +4,12 @@ setlocal enabledelayedexpansion
 
 REM ======== CONFIGURAÇÕES ========
 set "BASE_DIR=%~dp0"
-set "PYTHON_PATH=%BASE_DIR%..\app_py\Python313\Python313\python.exe"
-set "REQ_FILE=%BASE_DIR%..\app_py\requirements.txt"
-set "MAIN_FILE=%BASE_DIR%..\app_py\main.py"
+set "APP_DIR=%BASE_DIR%..\App_py\"
+set "PY_DIR=%APP_DIR%Python313"
+set "PYTHON_PATH=%PY_DIR%\python.exe"
+set "PY_ZIP=%APP_DIR%Python313.zip"
+set "REQ_FILE=%APP_DIR%requirements.txt"
+set "MAIN_FILE=%APP_DIR%main.py"
 set "LOG_FILE=%BASE_DIR%pip_repair_log.txt"
 set "TEST_LOG=%BASE_DIR%test_output.txt"
 set "SSL_URL=https://github.com/python/cpython/raw/main/PCbuild/amd64"
@@ -16,12 +19,20 @@ echo   AUTO-VERIFICADOR E REINSTALADOR PYTHON
 echo ===============================================
 echo.
 
+REM ======== PREPARA PYTHON ========
+if not exist "%PYTHON_PATH%" (
+    if exist "%PY_ZIP%" (
+        echo [INFO] Preparando ambiente Python...
+        powershell -NoProfile -Command "Expand-Archive -LiteralPath '%PY_ZIP%' -DestinationPath '%APP_DIR%' -Force" >nul 2>&1
+    )
+)
+
 REM ======== VERIFICA PYTHON ========
 if not exist "%PYTHON_PATH%" (
     echo [ERRO] Python nao encontrado em:
     echo "%PYTHON_PATH%"
     echo.
-    echo Certifique-se de que a pasta app_py\Python313 existe.
+    echo Certifique-se de que a pasta App_py\Python313 existe.
     pause
     exit /b 1
 )
@@ -45,7 +56,7 @@ if %errorlevel% neq 0 (
             powershell -Command "Invoke-WebRequest -Uri '%SSL_URL%/%%D' -OutFile '%BASE_DIR%%%D'" >nul 2>&1
         )
         copy /Y "%BASE_DIR%%%D" "%BASE_DIR%" >nul 2>&1
-        copy /Y "%BASE_DIR%%%D" "%BASE_DIR%..\app_py\Python313" >nul 2>&1
+        copy /Y "%BASE_DIR%%%D" "%PY_DIR%" >nul 2>&1
     )
     echo [INFO] DLLs SSL adicionadas (libssl-3.dll / libcrypto-3.dll)
 )
@@ -62,7 +73,7 @@ if not exist "%REQ_FILE%" (
 set "TMP_FILE=%BASE_DIR%req_fixed.txt"
 copy "%REQ_FILE%" "%TMP_FILE%" >nul 2>&1
 
-powershell -Command "(Get-Content '%TMP_FILE%') -replace '\bPIL\b','Pillow' -replace '\bfitz\b','PyMuPDF' -replace 'ttkbootstrap.*','ttkbootstrap==1.10.1' | Set-Content '%TMP_FILE%' -Encoding UTF8"
+powershell -Command "(Get-Content '%TMP_FILE%') -replace \"\\bPIL\\b\",'Pillow' -replace \"\\bfitz\\b\",'PyMuPDF' -replace 'ttkbootstrap.*','ttkbootstrap==1.10.1' | Set-Content '%TMP_FILE%' -Encoding UTF8"
 echo [INFO] Corrigido: PIL → Pillow / fitz → PyMuPDF / ttkbootstrap → versão 1.10.1
 
 REM ======== REMOVE PACOTES ========
