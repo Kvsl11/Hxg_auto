@@ -13,7 +13,7 @@ LOCAL_SCRIPT = "main.py"
 LOCAL_VERSION_FILE = "version_local.txt"
 
 # Caminho do Python interno (sem console)
-PYTHONW_PATH = os.path.join(os.getcwd(), "Python313", "pythonw.exe")
+PYTHONW_PATH = os.path.join(os.getcwd(), "Python313", "python.exe")
 
 # --- Funções auxiliares ---
 def get_local_version():

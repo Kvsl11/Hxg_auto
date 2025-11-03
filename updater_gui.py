@@ -20,7 +20,7 @@ SCRIPT_FILE = "main.py"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_SCRIPT = os.path.join(APP_DIR, SCRIPT_FILE)
 LOCAL_VERSION_FILE = os.path.join(APP_DIR, VERSION_FILE)
-PYTHON_EMBUTIDO = os.path.join(APP_DIR, "Python313", "pythonw.exe")
+PYTHON_EMBUTIDO = os.path.join(APP_DIR, "Python313", "python.exe")
 
 # --- Funções auxiliares ---
 def get_remote_version():

@@ -31,7 +31,7 @@ import customtkinter as ctk
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
-python_exe = os.path.join(app_dir,"Python313", "pythonw.exe")
+python_exe = os.path.join(app_dir,"Python313", "python.exe")
 
 # Configuração de logging (arquivo + console)
 log_path = os.path.join(app_dir, "ssl_patch.log")
