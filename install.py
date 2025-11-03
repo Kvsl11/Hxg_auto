@@ -1,16 +1,14 @@
-import subprocess, sys, os
+import requests, os, subprocess
 
-DEPENDENCIAS = ["requests", "tkinter"]
+GITHUB_USER = "Kvsl11"  # <-- substitua
+REPO_NAME = "Hxg_auto"
 
-def instalar_dependencias():
-    for pacote in DEPENDENCIAS:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", pacote])
+BASE_URL = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/"
+version = requests.get(BASE_URL + "version.txt").text.strip()
+file_name = f"Version_{version}.py"
 
-def iniciar_atualizador():
-    APP_DIR = os.path.dirname(os.path.abspath(__file__))
-    updater = os.path.join(APP_DIR, "updater_gui.py")
-    subprocess.run([sys.executable, updater])
-
-if __name__ == "__main__":
-    instalar_dependencias()
-    iniciar_atualizador()
+print(f"Baixando versão {version}...")
+r = requests.get(BASE_URL + file_name)
+open(file_name, "wb").write(r.content)
+print("Executando aplicação...")
+subprocess.Popen(["python", file_name])
