@@ -121,7 +121,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.0.8"
+VERSAO = "3.0.9"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
@@ -953,7 +953,7 @@ def executar_procedimento(usuario, senha):
             url = "https://access.hxgnagron.com/"
             
             atualizar_progresso("Iniciando driver...", step=1, total_steps=TOTAL_STEPS)
-            driver = iniciar_driver(headless=False)
+            driver = iniciar_driver(headless=True)
             
             atualizar_progresso("Realizando login...", step=2, total_steps=TOTAL_STEPS)
             login_usuario(driver, url, usuario, senha, xpaths)
