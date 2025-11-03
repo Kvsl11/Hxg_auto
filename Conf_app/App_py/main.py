@@ -31,7 +31,7 @@ import customtkinter as ctk
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
-python_exe = os.path.join(app_dir, "Python313", "python.exe")
+python_exe = os.path.join(app_dir, "Python313", "pythonw.exe")
 
 # Configuração de logging (arquivo + console)
 log_path = os.path.join(app_dir, "ssl_patch.log")
@@ -114,7 +114,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.0.2"
+VERSAO = "3.0.4"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
@@ -752,7 +752,7 @@ def criar_interface():
     }
     
     root = ttk.Window(themename="yeti")
-    root.title("AUTO - version 2.1")
+    root.title(f"HXG - Auto  v{VERSAO}")
     
     # Configura o estilo para usar a nova paleta de cores
     style = ttk.Style()
@@ -946,7 +946,7 @@ def executar_procedimento(usuario, senha):
             url = "https://access.hxgnagron.com/"
             
             atualizar_progresso("Iniciando driver...", step=1, total_steps=TOTAL_STEPS)
-            driver = iniciar_driver(headless=True)
+            driver = iniciar_driver(headless=False)
             
             atualizar_progresso("Realizando login...", step=2, total_steps=TOTAL_STEPS)
             login_usuario(driver, url, usuario, senha, xpaths)

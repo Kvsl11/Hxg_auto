@@ -56,7 +56,7 @@ def baixar_script():
 
 def executar_script():
     """Executa o script principal com o Python atual."""
-    print("🚀 Iniciando Auto-Ficha-OPE...")
+    print("🚀 Iniciando Hxg_auto...")
     subprocess.run(["python", LOCAL_SCRIPT])
 
 if __name__ == "__main__":
