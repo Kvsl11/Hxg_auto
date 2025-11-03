@@ -1,5 +1,6 @@
 import requests, os, ssl, subprocess, sys, tkinter as tk
 from tkinter import messagebox
+import traceback
 
 # --- Ignora SSL corporativo (seguro em rede interna) ---
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -12,10 +13,21 @@ URL_SCRIPT = f"https://raw.githubusercontent.com/{REPO}/main/main.py"
 LOCAL_SCRIPT = "main.py"
 LOCAL_VERSION_FILE = "version_local.txt"
 
-# Caminho do Python interno (sem console)
-PYTHONW_PATH = os.path.join(os.getcwd(), "Python313", "pythonw.exe")
+# Caminho absoluto do Python interno (sem console)
+PYTHON_DIR = os.path.join(os.getcwd(), "Python313")
+PYTHONW_PATH = os.path.join(PYTHON_DIR, "pythonw.exe")
+PYTHON_PATH = os.path.join(PYTHON_DIR, "python.exe")
+
+# Caminho do log de erro (para debug)
+LOG_FILE = "updater_error.log"
 
 # --- Funções auxiliares ---
+def log_error(exc: Exception):
+    """Grava erros em um arquivo de log local para diagnóstico."""
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write("\n--- ERRO ---\n")
+        traceback.print_exc(file=f)
+
 def get_local_version():
     """Lê a versão local salva no arquivo."""
     if os.path.exists(LOCAL_VERSION_FILE):
@@ -29,8 +41,8 @@ def get_online_version():
         r = requests.get(URL_VERSION, timeout=10, verify=False)
         if r.status_code == 200:
             return r.text.strip()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error(e)
     return None
 
 def atualizar_script():
@@ -43,18 +55,22 @@ def atualizar_script():
         with open(LOCAL_SCRIPT, "wb") as f:
             f.write(r.content)
         return True
-    except Exception:
+    except Exception as e:
+        log_error(e)
         return False
 
 def save_local_version(ver):
     """Salva versão local após atualização."""
-    with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
-        f.write(ver)
+    try:
+        with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
+            f.write(ver)
+    except Exception as e:
+        log_error(e)
 
 # --- Interface visual de atualização ---
 def show_update_ui(local_v, online_v):
     win = tk.Tk()
-    win.title("Atualização disponível - Auto-Ficha-OPE")
+    win.title("Atualização disponível - Hxg_auto")
     win.geometry("400x280")
     win.configure(bg="#232323")
     win.resizable(False, False)
@@ -94,41 +110,52 @@ def show_update_ui(local_v, online_v):
 
 # --- Função para iniciar o app ---
 def iniciar_app():
-    """Executa o app principal usando pythonw.exe sem console."""
-    python_exe = PYTHONW_PATH if os.path.exists(PYTHONW_PATH) else sys.executable
+    """Executa o app principal usando pythonw.exe (sem console) ou python.exe se necessário."""
+    python_exe = PYTHONW_PATH if os.path.exists(PYTHONW_PATH) else (
+        PYTHON_PATH if os.path.exists(PYTHON_PATH) else sys.executable
+    )
+
     try:
+        # Se quiser depurar erros, troque 'pythonw' por 'python' para ver o console.
         subprocess.Popen(
             [python_exe, LOCAL_SCRIPT],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+            creationflags=subprocess.CREATE_NO_WINDOW,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-    except Exception:
-        pass
+    except Exception as e:
+        log_error(e)
+        # fallback — tenta executar visível, para depuração
+        try:
+            subprocess.Popen([python_exe, LOCAL_SCRIPT])
+        except Exception as e2:
+            log_error(e2)
     finally:
         os._exit(0)
 
 # --- Execução principal ---
 def main():
-    # Garante que não haja console mesmo se rodar via python.exe
-    if sys.stdout is not None:
-        try:
-            sys.stdout.flush()
-            sys.stdout = open(os.devnull, 'w')
-            sys.stderr = open(os.devnull, 'w')
-        except Exception:
-            pass
+    # Redireciona saída para log (caso rode via python.exe)
+    try:
+        sys.stdout = open(os.devnull, 'w')
+        sys.stderr = open(os.devnull, 'w')
+    except Exception:
+        pass
 
-    local_v = get_local_version()
-    online_v = get_online_version()
+    try:
+        local_v = get_local_version()
+        online_v = get_online_version()
 
-    if not online_v:
-        iniciar_app()
-        return
+        if not online_v:
+            iniciar_app()
+            return
 
-    if online_v != local_v:
-        show_update_ui(local_v, online_v)
-    else:
+        if online_v != local_v:
+            show_update_ui(local_v, online_v)
+        else:
+            iniciar_app()
+    except Exception as e:
+        log_error(e)
         iniciar_app()
 
 if __name__ == "__main__":

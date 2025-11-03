@@ -31,7 +31,7 @@ import customtkinter as ctk
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
-python_exe = os.path.join(app_dir, "Python313", "pythonw.exe")
+python_exe = os.path.join(app_dir, "app_py", "Python313", "Python313", "pythonw.exe")
 
 # Configuração de logging (arquivo + console)
 log_path = os.path.join(app_dir, "ssl_patch.log")
@@ -114,7 +114,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.0.4"
+VERSAO = "3.0.5"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
