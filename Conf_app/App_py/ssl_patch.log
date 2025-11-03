@@ -1,0 +1,5 @@
+2025-11-03 11:53:19,497 - INFO - 🚀 Iniciando verificação e correção SSL híbrida...
+2025-11-03 11:53:19,497 - WARNING - ⚠️ Python interno não encontrado em: c:\Users\kvlopes\Desktop\Scripts\Hxg_auto\Conf_app\App_py\Python313\pythonw.exe
+2025-11-03 11:53:19,498 - INFO - 🟢 Amazon Root CA 1 já está presente no cacert.pem.
+2025-11-03 11:53:19,894 - WARNING - ⚠️ Erro genérico ao testar SSL: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1032)>. Aplicando fallback.
+2025-11-03 11:53:19,895 - INFO - ✅ Configuração SSL concluída com segurança.
