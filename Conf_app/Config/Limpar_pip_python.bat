@@ -4,12 +4,7 @@ setlocal enabledelayedexpansion
 
 REM ======== CONFIGURAÇÕES ========
 set "BASE_DIR=%~dp0"
-set "APP_DIR=%BASE_DIR%..\App_py\"
-set "PY_DIR=%APP_DIR%Python313"
-set "PYTHON_PATH=%PY_DIR%\python.exe"
-set "PY_ZIP=%APP_DIR%Python313.zip"
-set "REQ_FILE=%APP_DIR%requirements.txt"
-set "MAIN_FILE=%APP_DIR%main.py"
+
 set "LOG_FILE=%BASE_DIR%pip_repair_log.txt"
 set "TEST_LOG=%BASE_DIR%test_output.txt"
 set "SSL_URL=https://github.com/python/cpython/raw/main/PCbuild/amd64"
@@ -56,7 +51,7 @@ if %errorlevel% neq 0 (
             powershell -Command "Invoke-WebRequest -Uri '%SSL_URL%/%%D' -OutFile '%BASE_DIR%%%D'" >nul 2>&1
         )
         copy /Y "%BASE_DIR%%%D" "%BASE_DIR%" >nul 2>&1
-        copy /Y "%BASE_DIR%%%D" "%PY_DIR%" >nul 2>&1
+
     )
     echo [INFO] DLLs SSL adicionadas (libssl-3.dll / libcrypto-3.dll)
 )
