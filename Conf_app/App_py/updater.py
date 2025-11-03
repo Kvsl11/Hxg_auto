@@ -1,6 +1,5 @@
-import requests, os, ssl, subprocess, sys, tkinter as tk
+import requests, os, ssl, subprocess, tkinter as tk
 from tkinter import messagebox
-import traceback
 
 # --- Ignora SSL corporativo (seguro em rede interna) ---
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -13,65 +12,53 @@ URL_SCRIPT = f"https://raw.githubusercontent.com/{REPO}/main/main.py"
 LOCAL_SCRIPT = "main.py"
 LOCAL_VERSION_FILE = "version_local.txt"
 
-# Caminho absoluto do Python interno (sem console)
-PYTHON_DIR = os.path.join(os.getcwd(), "Python313")
-PYTHONW_PATH = os.path.join(PYTHON_DIR, "pythonw.exe")
-PYTHON_PATH = os.path.join(PYTHON_DIR, "python.exe")
-
-# Caminho do log de erro (para debug)
-LOG_FILE = "updater_error.log"
+# Caminho do Python interno (sem console)
+PYTHONW_PATH = os.path.join(os.getcwd(), "Python313", "pythonw.exe")
 
 # --- Funções auxiliares ---
-def log_error(exc: Exception):
-    """Grava erros em um arquivo de log local para diagnóstico."""
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write("\n--- ERRO ---\n")
-        traceback.print_exc(file=f)
-
 def get_local_version():
-    """Lê a versão local salva no arquivo."""
     if os.path.exists(LOCAL_VERSION_FILE):
         with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return "0.0.0"
 
 def get_online_version():
-    """Obtém versão mais recente do GitHub."""
     try:
         r = requests.get(URL_VERSION, timeout=10, verify=False)
         if r.status_code == 200:
             return r.text.strip()
     except Exception as e:
-        log_error(e)
+        print("Erro ao obter versão online:", e)
     return None
 
 def atualizar_script():
-    """Baixa nova versão do main.py."""
+    """Baixa a nova versão do main.py diretamente e substitui a existente."""
     try:
         r = requests.get(URL_SCRIPT, timeout=20, verify=False)
         r.raise_for_status()
+        conteudo = r.content
+
+        # Remove o main.py antigo (se existir)
         if os.path.exists(LOCAL_SCRIPT):
             os.remove(LOCAL_SCRIPT)
+
+        # Cria o novo main.py atualizado
         with open(LOCAL_SCRIPT, "wb") as f:
-            f.write(r.content)
+            f.write(conteudo)
         return True
     except Exception as e:
-        log_error(e)
+        print("Erro ao atualizar script:", e)
         return False
 
 def save_local_version(ver):
-    """Salva versão local após atualização."""
-    try:
-        with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
-            f.write(ver)
-    except Exception as e:
-        log_error(e)
+    with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
+        f.write(ver)
 
 # --- Interface visual de atualização ---
 def show_update_ui(local_v, online_v):
     win = tk.Tk()
     win.title("Atualização disponível - Hxg_auto")
-    win.geometry("400x280")
+    win.geometry("400x300")
     win.configure(bg="#232323")
     win.resizable(False, False)
 
@@ -104,58 +91,36 @@ def show_update_ui(local_v, online_v):
 
     tk.Button(win, text="Ignorar", command=lambda: [win.destroy(), iniciar_app()],
               bg="#555", fg="white", width=20).pack(pady=5)
-
-    win.protocol("WM_DELETE_WINDOW", lambda: [win.destroy(), iniciar_app()])
     win.mainloop()
 
 # --- Função para iniciar o app ---
 def iniciar_app():
-    """Executa o app principal usando pythonw.exe (sem console) ou python.exe se necessário."""
-    python_exe = PYTHONW_PATH if os.path.exists(PYTHONW_PATH) else (
-        PYTHON_PATH if os.path.exists(PYTHON_PATH) else sys.executable
-    )
-
-    try:
-        # Se quiser depurar erros, troque 'pythonw' por 'python' para ver o console.
+    """Executa o app principal com pythonw.exe sem console."""
+    if os.path.exists(PYTHONW_PATH):
         subprocess.Popen(
-            [python_exe, LOCAL_SCRIPT],
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            [PYTHONW_PATH, LOCAL_SCRIPT],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
         )
-    except Exception as e:
-        log_error(e)
-        # fallback — tenta executar visível, para depuração
-        try:
-            subprocess.Popen([python_exe, LOCAL_SCRIPT])
-        except Exception as e2:
-            log_error(e2)
-    finally:
-        os._exit(0)
+    else:
+        subprocess.Popen(["python", LOCAL_SCRIPT])
+    os._exit(0)
 
 # --- Execução principal ---
 def main():
-    # Redireciona saída para log (caso rode via python.exe)
-    try:
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
-    except Exception:
-        pass
+    print("🔍 Verificando atualizações...")
+    local_v = get_local_version()
+    online_v = get_online_version()
 
-    try:
-        local_v = get_local_version()
-        online_v = get_online_version()
+    if not online_v:
+        print("⚠️ Sem conexão ou erro de versão online. Rodando local.")
+        iniciar_app()
+        return
 
-        if not online_v:
-            iniciar_app()
-            return
-
-        if online_v != local_v:
-            show_update_ui(local_v, online_v)
-        else:
-            iniciar_app()
-    except Exception as e:
-        log_error(e)
+    if online_v != local_v:
+        print(f"🟡 Nova versão detectada: {online_v} (local: {local_v})")
+        show_update_ui(local_v, online_v)
+    else:
+        print(f"🟢 Você está usando a versão mais recente ({local_v}).")
         iniciar_app()
 
 if __name__ == "__main__":

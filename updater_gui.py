@@ -19,11 +19,12 @@ SCRIPT_FILE = "main.py"
 # --- Caminhos locais ---
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_SCRIPT = os.path.join(APP_DIR, SCRIPT_FILE)
-LOCAL_VERSION_FILE = os.path.join(APP_DIR, "version_local.txt")
-PYTHON_EMBUTIDO = os.path.join(APP_DIR, "App_py", "Python313", "Python313", "pythonw.exe")
+LOCAL_VERSION_FILE = os.path.join(APP_DIR, VERSION_FILE)
+PYTHON_EMBUTIDO = os.path.join(APP_DIR, "Python313", "pythonw.exe")
 
 # --- Funções auxiliares ---
 def get_remote_version():
+    """Obtém a versão online do repositório GitHub."""
     try:
         r = requests.get(BASE_URL + VERSION_FILE, timeout=8, verify=False)
         if r.status_code == 200:
@@ -33,16 +34,19 @@ def get_remote_version():
     return None
 
 def get_local_version():
+    """Lê a versão local salva em version.txt."""
     if os.path.exists(LOCAL_VERSION_FILE):
         with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return "0.0.0"
 
 def save_local_version(version):
+    """Atualiza o arquivo version.txt local."""
     with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
         f.write(version)
 
 def download_main(version):
+    """Baixa o novo main.py atualizado do GitHub."""
     try:
         r = requests.get(BASE_URL + SCRIPT_FILE, timeout=15, verify=False)
         r.raise_for_status()
@@ -55,6 +59,7 @@ def download_main(version):
         return False
 
 def iniciar_app():
+    """Executa o app principal (usando o Python embutido, se existir)."""
     if os.path.exists(PYTHON_EMBUTIDO):
         subprocess.Popen([PYTHON_EMBUTIDO, LOCAL_SCRIPT])
     else:
@@ -62,6 +67,7 @@ def iniciar_app():
     exit()
 
 def check_update():
+    """Verifica se há atualização e baixa automaticamente, se necessário."""
     local_v = get_local_version()
     remote_v = get_remote_version()
 
@@ -71,12 +77,10 @@ def check_update():
         return
 
     if local_v != remote_v:
-        if messagebox.askyesno(
-            "Atualização disponível",
-            f"Versão atual: {local_v}\nNova versão: {remote_v}\n\nDeseja atualizar agora?"
-        ):
+        if messagebox.askyesno("Atualização disponível",
+                               f"Versão atual: {local_v}\nNova versão: {remote_v}\n\nDeseja atualizar agora?"):
             if download_main(remote_v):
-                messagebox.showinfo("Sucesso", f"✅ Atualizado para a versão {remote_v}!")
+                messagebox.showinfo("Sucesso", f"✅ Atualizado para a versão {remote_v} com sucesso!")
             else:
                 messagebox.showerror("Erro", "Falha ao atualizar o aplicativo.")
         else:
@@ -87,5 +91,5 @@ def check_update():
 # --- Execução principal ---
 if __name__ == "__main__":
     root = tk.Tk()
-    root.withdraw()
+    root.withdraw()  # Oculta a janela principal
     check_update()

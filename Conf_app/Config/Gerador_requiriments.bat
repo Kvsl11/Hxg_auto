@@ -9,11 +9,14 @@ REM   Config\gerar_requirements.bat
 REM   app_py\main.py
 REM ============================================
 
+REM === Caminho base: pasta onde este .bat está ===
 set "BASE_DIR=%~dp0"
 
+REM === Caminho do main.py e destino do requirements.txt ===
 set "MAIN_FILE=%BASE_DIR%..\app_py\main.py"
 set "REQ_FILE=%BASE_DIR%..\app_py\requirements.txt"
 
+REM === Se não encontrar, tenta variações de nome ===
 if not exist "%MAIN_FILE%" (
     if exist "%BASE_DIR%..\App_py\main.py" (
         set "MAIN_FILE=%BASE_DIR%..\App_py\main.py"
@@ -38,18 +41,15 @@ echo.
 echo [INFO] Arquivo localizado em: "%MAIN_FILE%"
 echo.
 
+REM === Remove o antigo e cria novo ===
 del "%REQ_FILE%" >nul 2>&1
 echo.>"%REQ_FILE%"
 
 REM === Extrai imports do main.py ===
-for /f "tokens=1,2 delims= " %%a in ('findstr /r "^import ^from" "%MAIN_FILE%"') do (
-    if /i "%%a"=="import" (
-        for %%m in (%%b) do (
-            for /f "delims=. tokens=1" %%x in ("%%m") do echo %%x>>"%REQ_FILE%"
-        )
-    ) else if /i "%%a"=="from" (
-        for /f "delims=. tokens=1" %%x in ("%%b") do echo %%x>>"%REQ_FILE%"
-    )
+for /f "tokens=2 delims= " %%i in ('findstr /r "^import ^from" "%MAIN_FILE%"') do (
+    set "mod=%%i"
+    for /f "delims=. tokens=1" %%a in ("!mod!") do set "mod=%%a"
+    echo !mod!>>"%REQ_FILE%"
 )
 
 REM === Remove duplicados e módulos nativos ===
