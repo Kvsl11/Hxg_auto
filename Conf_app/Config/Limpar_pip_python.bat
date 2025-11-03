@@ -24,7 +24,7 @@ if not exist "%PYTHON_PATH%" (
     echo [ERRO] Python nao encontrado em:
     echo "%PYTHON_PATH%"
     echo.
-    echo Certifique-se de que a pasta app_py\Python313 existe.
+    echo Certifique-se de que a pasta App_py\Python313 existe.
     pause
     exit /b 1
 )
