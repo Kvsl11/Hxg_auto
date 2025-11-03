@@ -33,6 +33,13 @@ import customtkinter as ctk
 app_dir = os.path.dirname(os.path.abspath(__file__))
 python_exe = os.path.join(app_dir,"Python313", "python.exe")
 
+# Se o script não estiver rodando pelo Python interno, relança com ele
+if "Python313" not in sys.executable and os.path.exists(python_exe):
+    print("🟢 Usando Python interno (embutido na pasta)...")
+    subprocess.run([python_exe, os.path.abspath(__file__)])
+    sys.exit(0)
+
+
 # Configuração de logging (arquivo + console)
 log_path = os.path.join(app_dir, "ssl_patch.log")
 logging.basicConfig(
