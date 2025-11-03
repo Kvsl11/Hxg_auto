@@ -114,7 +114,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.0.7"
+VERSAO = "3.0.8"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
@@ -783,7 +783,7 @@ def criar_interface():
     ttk.Label(main_frame, text="AUTO. CONTIGÊNCIA - HXG", font=("Helvetica", 20, "bold"), foreground=PALETTE["primary"]).pack(pady=(0, 20))
 
     # Frame de credenciais
-    cred_frame = ttk.LabelFrame(main_frame, text="Credenciais", padding=15)
+    cred_frame = ttk.Labelframe(main_frame, text="Credenciais", padding=15)
     cred_frame.pack(fill="x", pady=10)
     
     ttk.Label(cred_frame, text="Usuário:").pack(anchor="w", pady=(0, 5))
@@ -825,7 +825,7 @@ def criar_interface():
 
 
     # Seletor de Responsáveis
-    resp_frame = ttk.LabelFrame(main_frame, text="Gerar PDF para:", padding=15)
+    resp_frame = ttk.Labelframe(main_frame, text="Gerar PDF para:", padding=15)
     resp_frame.pack(fill="both", expand=True, pady=10)
 
     def selecionar_todos():
