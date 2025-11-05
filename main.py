@@ -32,29 +32,72 @@ import customtkinter as ctk
 ssl._create_default_https_context = ssl._create_unverified_context
 requests.packages.urllib3.disable_warnings()
 
-# Defina os arquivos a atualizar (relativo ao diretório do app)
-ATUALIZAVEIS = {
-    "main.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/main.py",
-    "updater.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/updater.py",
-    "app.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/app.py",
-    "iniciar_app.bat": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/iniciar_app.bat"
-}
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# Ajuste conforme seu repositório
+GITHUB_USER = "Kvsl11"
+REPO_NAME = "Hxg_auto"
+BASE_URL = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/"
+VERSION_FILE = "version.txt"
+SCRIPT_FILE = "main.py"
+LOCAL_VERSION_FILE = os.path.join(os.path.dirname(__file__), "version.txt")
+LOCAL_SCRIPT = os.path.join(os.path.dirname(__file__), "main.py")
+TMP_SCRIPT = os.path.join(os.path.dirname(__file__), "main_new.py")
 
-def atualizar_todos_arquivos():
-    for nome_arquivo, url in ATUALIZAVEIS.items():
-        local_path = os.path.join(APP_DIR, nome_arquivo)
+ssl._create_default_https_context = ssl._create_unverified_context
+requests.packages.urllib3.disable_warnings()
+
+def get_remote_version():
+    try:
+        r = requests.get(BASE_URL + VERSION_FILE, timeout=10, verify=False)
+        if r.status_code == 200:
+            return r.text.strip()
+    except Exception as e:
+        print(f"Erro ao buscar versão remota: {e}")
+    return None
+
+def get_local_version():
+    if os.path.exists(LOCAL_VERSION_FILE):
+        with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return "0.0.0"
+
+def save_local_version(version):
+    with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
+        f.write(version)
+
+def download_main(version):
+    try:
+        r = requests.get(BASE_URL + SCRIPT_FILE, timeout=15, verify=False)
+        r.raise_for_status()
+        with open(TMP_SCRIPT, "wb") as f:
+            f.write(r.content)
+        save_local_version(version)
+        return True
+    except Exception as e:
+        print(f"Falha ao baixar main.py: {e}")
+        return False
+
+def swap_and_restart():
+    # Troca main.py pelo novo, e reinicia
+    for _ in range(5):
         try:
-            print(f"🔄 Baixando {nome_arquivo}...")
-            r = requests.get(url, timeout=20, verify=False)
-            if r.status_code == 200:
-                with open(local_path, "wb") as f:
-                    f.write(r.content)
-                print(f"✅ {nome_arquivo} atualizado.")
-            else:
-                print(f"❌ Falha ao baixar {nome_arquivo}: HTTP {r.status_code}")
-        except Exception as e:
-            print(f"❌ Erro ao atualizar {nome_arquivo}: {e}")
+            os.remove(LOCAL_SCRIPT)
+            break
+        except PermissionError:
+            time.sleep(1)
+    os.rename(TMP_SCRIPT, LOCAL_SCRIPT)
+    print("Reiniciando na versão nova!")
+    os.execl(sys.executable, sys.executable, LOCAL_SCRIPT)
+
+def atualizar_se_preciso():
+    local_v = get_local_version()
+    remote_v = get_remote_version()
+    print(f"Local: {local_v} | Online: {remote_v}")
+    if remote_v and remote_v != local_v:
+        print("Atualização disponível!")
+        if download_main(remote_v):
+            swap_and_restart()
+        else:
+            print("Falha ao atualizar, rodando versão antiga.")
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1025,7 +1068,7 @@ def executar_procedimento(usuario, senha):
     atualizar_progresso("Procedimento finalizado.", step=0, total_steps=1)
     print("🏁 Procedimento finalizado.")
 
-atualizar_todos_arquivos()
+atualizar_se_preciso()
 
 if __name__ == "__main__":
     driver = None
