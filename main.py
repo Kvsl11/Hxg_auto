@@ -123,9 +123,9 @@ logger.info("✅ Configuração SSL concluída com segurança.")
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
 VERSAO = "3.1.2"
 
-def verificar_atualizacao_disponivel(root=None, frame_status=None):
+def verificar_e_atualizar_automaticamente():
     """
-    Verifica no GitHub se há nova versão e mostra na interface (sem usar updater externo).
+    Verifica no GitHub se há nova versão e atualiza automaticamente sem interação do usuário.
     """
     try:
         REPO = "Kvsl11/Hxg_auto"
@@ -133,103 +133,77 @@ def verificar_atualizacao_disponivel(root=None, frame_status=None):
         URL_SCRIPT = f"https://raw.githubusercontent.com/{REPO}/main/main.py"
         LOCAL_SCRIPT = os.path.join(os.path.dirname(__file__), "main.py")
         LOCAL_VERSION_FILE = os.path.join(os.path.dirname(__file__), "version_local.txt")
+        LOG_PATH = os.path.join(os.path.dirname(__file__), "autoupdate.log")
+
+        logging.basicConfig(
+            filename=LOG_PATH,
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s"
+        )
 
         def get_local_version():
             if os.path.exists(LOCAL_VERSION_FILE):
-                with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
-                    return f.read().strip()
-            return VERSAO
+                try:
+                    with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
+                        return f.read().strip()
+                except Exception:
+                    return "0.0.0"
+            return "0.0.0"
 
         def get_online_version():
             try:
-                r = requests.get(URL_VERSION, timeout=10, verify=False)
+                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+                r = requests.get(URL_VERSION, timeout=10, verify=False, headers=headers)
                 if r.status_code == 200:
                     return r.text.strip()
+                else:
+                    logging.warning(f"⚠️ Falha HTTP ao buscar versão: {r.status_code}")
             except Exception as e:
-                logger.warning(f"⚠️ Falha ao obter versão online: {e}")
+                logging.warning(f"⚠️ Falha ao obter versão online: {e}")
             return None
 
         def save_local_version(ver):
-            with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
-                f.write(ver)
+            try:
+                with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
+                    f.write(ver)
+                logging.info(f"✅ Versão local atualizada para {ver}")
+            except Exception as e:
+                logging.error(f"❌ Erro ao salvar versão local: {e}")
 
         def atualizar_script(versao_online):
             try:
-                r = requests.get(URL_SCRIPT, timeout=20, verify=False)
+                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+                r = requests.get(URL_SCRIPT, timeout=20, verify=False, headers=headers)
                 r.raise_for_status()
                 with open(LOCAL_SCRIPT, "wb") as f:
                     f.write(r.content)
                 save_local_version(versao_online)
-                messagebox.showinfo(
-                    "Atualização concluída",
-                    f"✅ Atualizado para a versão {versao_online}.\nO app será reiniciado."
-                )
-                subprocess.Popen(["python", LOCAL_SCRIPT])
-                os._exit(0)
+                logging.info(f"✅ Atualização concluída para a versão {versao_online}")
+                return True
             except Exception as e:
-                messagebox.showerror("Erro", f"⚠️ Falha ao atualizar: {e}")
-
-        # --- UI ---
-        if frame_status:
-            for widget in frame_status.winfo_children():
-                widget.destroy()
-            status_label = ctk.CTkLabel(frame_status, text="🔄 Verificando atualizações...", text_color="#ffffff")
-            status_label.pack(pady=2)
+                logging.error(f"❌ Falha ao atualizar script: {e}")
+                return False
 
         local_v = get_local_version()
         online_v = get_online_version()
 
         if not online_v:
-            if frame_status:
-                for widget in frame_status.winfo_children():
-                    widget.destroy()
-                ctk.CTkLabel(
-                    frame_status,
-                    text=f"⚠️ Falha ao verificar atualização (sem conexão)",
-                    text_color="#ffcc00"
-                ).pack(pady=3)
+            logging.warning("⚠️ Falha ao verificar versão online. Continuando com a versão local.")
             return
 
-        for widget in frame_status.winfo_children():
-            widget.destroy()
-
         if online_v != local_v:
-            label = ctk.CTkLabel(
-                frame_status,
-                text=f"🟡 Nova versão disponível: v{online_v}",
-                text_color="#fff8dc",
-                font=ctk.CTkFont(weight="bold")
-            )
-            label.pack(side="left", padx=10, pady=3)
-
-            btn_update = ctk.CTkButton(
-                frame_status,
-                text="⬇ Atualizar agora",
-                fg_color="#ffaa00",
-                hover_color="#cc8800",
-                text_color="#000000",
-                width=150,
-                command=lambda: atualizar_script(online_v)
-            )
-            btn_update.pack(side="right", padx=10, pady=3)
+            logging.info(f"🟡 Nova versão detectada: {online_v} (local: {local_v}) — atualizando...")
+            sucesso = atualizar_script(online_v)
+            if sucesso:
+                logging.info("♻️ Reiniciando app com nova versão...")
+                python_exe = sys.executable
+                subprocess.Popen([python_exe, LOCAL_SCRIPT])
+                os._exit(0)
         else:
-            label = ctk.CTkLabel(
-                frame_status,
-                text=f"🟢 Atualizado — v{local_v}",
-                text_color="#43948c",
-                font=ctk.CTkFont(weight="bold")
-            )
-            label.pack(pady=3)
+            logging.info(f"🟢 Aplicativo já está atualizado ({local_v})")
 
     except Exception as e:
-        if frame_status:
-            for widget in frame_status.winfo_children():
-                widget.destroy()
-            ctk.CTkLabel(
-                frame_status,
-                text=f"⚠️ Erro ao verificar atualização: {e}",
-                text_color="#ffcc00"
-            ).pack(pady=3)
+        logging.error(f"❌ Erro na verificação automática de atualização: {e}")
 
 warnings.filterwarnings(
     "ignore",
