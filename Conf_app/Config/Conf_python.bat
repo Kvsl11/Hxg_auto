@@ -1,11 +1,12 @@
 @echo off
-title Gerar requirements.txt + Verificar Ambiente Python
+title Gerar requirements.txt + Verificar Ambiente Python (Modo Seguro)
 setlocal enabledelayedexpansion
 
 REM ============================================
-REM   SCRIPT ÚNICO: GERAR E REPARAR AMBIENTE
-REM   1. Gera requirements.txt automaticamente
-REM   2. Verifica pip/SSL e reinstala pacotes
+REM   GERADOR E VERIFICADOR DE AMBIENTE PYTHON
+REM   - Gera requirements.txt automaticamente
+REM   - Verifica pip/SSL
+REM   - Atualiza apenas pacotes desatualizados
 REM ============================================
 
 REM === Caminho base ===
@@ -42,7 +43,7 @@ if not exist "%MAIN_FILE%" (
     )
 )
 
-echo [1/7] Gerando requirements.txt...
+echo [1/6] Gerando requirements.txt...
 del "%REQ_FILE%" >nul 2>&1
 echo.>"%REQ_FILE%"
 
@@ -70,6 +71,7 @@ for /f "usebackq delims=" %%M in ("%REQ_FILE%") do (
 move /y "%TMP_FILE%" "%REQ_FILE%" >nul
 echo setuptools>>"%REQ_FILE%"
 echo wheel>>"%REQ_FILE%"
+echo requests>>"%REQ_FILE%"
 
 echo [OK] requirements.txt gerado com sucesso.
 echo Local: %REQ_FILE%
@@ -79,7 +81,7 @@ REM ===============================
 REM   PARTE 2 - VERIFICAR AMBIENTE
 REM ===============================
 
-echo [2/7] Verificando ambiente Python...
+echo [2/6] Verificando ambiente Python...
 if not exist "%PYTHON_PATH%" (
     echo [ERRO] Python nao encontrado em:
     echo "%PYTHON_PATH%"
@@ -87,12 +89,12 @@ if not exist "%PYTHON_PATH%" (
     exit /b 1
 )
 
-echo [3/7] Verificando pip e SSL...
+echo [3/6] Verificando pip e SSL...
 "%PYTHON_PATH%" -m pip -V >nul 2>&1
 if %errorlevel% neq 0 (
     echo [INFO] Pip ausente. Tentando reparar...
-    "%PYTHON_PATH%" -m ensurepip --upgrade >nul 2>&1
-    "%PYTHON_PATH%" -m pip install --upgrade pip setuptools wheel >nul 2>&1
+    "%PYTHON_PATH%" -m ensurepip --upgrade
+    "%PYTHON_PATH%" -m pip install --upgrade pip setuptools wheel
 )
 
 "%PYTHON_PATH%" -m pip install requests --dry-run >nul 2>&1
@@ -109,52 +111,38 @@ if %errorlevel% neq 0 (
     echo [INFO] DLLs SSL adicionadas (libssl-3.dll / libcrypto-3.dll)
 )
 
-echo [4/7] Corrigindo requirements.txt...
+echo [4/6] Corrigindo requirements.txt...
 set "TMP_FILE=%BASE_DIR%req_fixed.txt"
 copy "%REQ_FILE%" "%TMP_FILE%" >nul 2>&1
 powershell -Command "(Get-Content '%TMP_FILE%') -replace '\bPIL\b','Pillow' -replace '\bfitz\b','PyMuPDF' | Set-Content '%TMP_FILE%' -Encoding UTF8"
 echo [INFO] Corrigido: PIL → Pillow / fitz → PyMuPDF
-
 echo.
 echo Pacotes detectados:
 type "%TMP_FILE%"
 echo.
-pause
 
-echo [5/7] Removendo pacotes existentes...
-"%PYTHON_PATH%" -m pip freeze > "%BASE_DIR%all.txt" 2>nul
-for /f "usebackq delims=" %%P in ("%BASE_DIR%all.txt") do (
-    echo Removendo %%P ...
-    "%PYTHON_PATH%" -m pip uninstall -y %%P >> "%LOG_FILE%" 2>&1
-)
-del "%BASE_DIR%all.txt" >nul 2>&1
+REM ===============================
+REM   PARTE 3 - INSTALAR PACOTES
+REM ===============================
 
-echo [6/7] Atualizando pip, setuptools e wheel...
-"%PYTHON_PATH%" -m pip install --upgrade pip setuptools wheel >> "%LOG_FILE%" 2>&1
+echo [5/6] Atualizando pip, setuptools e wheel...
+"%PYTHON_PATH%" -m pip install --upgrade pip setuptools wheel
 
 echo.
-echo Deseja instalar os pacotes do requirements.txt agora? (Y/N)
-set /p USER_CHOICE="> "
-if /i "%USER_CHOICE%"=="N" (
-    echo [INFO] Instalacao cancelada.
-    echo Log salvo em: %LOG_FILE%
-    pause
-    exit /b 0
-)
-if /i not "%USER_CHOICE%"=="Y" (
-    echo [ERRO] Opcao invalida.
-    pause
-    exit /b 1
-)
+echo [6/6] Instalando ou atualizando pacotes detectados...
+echo ===============================================
+echo (serao instalados apenas pacotes faltantes ou desatualizados)
+echo ===============================================
+echo.
 
-echo [7/7] Instalando pacotes...
-"%PYTHON_PATH%" -m pip install -r "%TMP_FILE%" >> "%LOG_FILE%" 2>&1
+REM Mostra a instalação em tempo real e também salva no log
+"%PYTHON_PATH%" -m pip install -r "%TMP_FILE%" --upgrade --no-warn-script-location | tee "%LOG_FILE%"
 
 if %errorlevel% neq 0 (
     echo [AVISO] Erros durante a instalacao. Veja o log:
     echo %LOG_FILE%
 ) else (
-    echo [SUCESSO] Todos os pacotes foram instalados corretamente!
+    echo [SUCESSO] Todos os pacotes estao atualizados!
 )
 
 echo.
