@@ -2,16 +2,17 @@ name: 🔁 AutoZip Conf_app
 
 on:
   push:
-    paths:
-      - 'Conf_app/**'    # Executa somente se algo dentro da pasta mudar
     branches:
-      - main             # Ou a branch principal do seu repositório
+      - main
+    paths:
+      - 'Conf_app/**'
+      - '.github/workflows/auto-zip-confapp.yml'  # Reexecuta se este arquivo mudar
 
 jobs:
   zip-confapp:
     runs-on: ubuntu-latest
     permissions:
-      contents: write     # Permite subir o ZIP no repositório
+      contents: write
 
     steps:
       - name: 📥 Clonando repositório
@@ -19,9 +20,13 @@ jobs:
 
       - name: 🧩 Compactando pasta Conf_app
         run: |
-          cd Conf_app
-          zip -r ../Conf_app.zip ./*
-          cd ..
+          echo "Compactando pasta Conf_app..."
+          if [ -d "Conf_app" ]; then
+            zip -r Conf_app.zip Conf_app
+          else
+            echo "❌ Pasta Conf_app não encontrada!"
+            exit 1
+          fi
 
       - name: 📤 Commit e push do ZIP gerado
         run: |
@@ -29,9 +34,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if [ -f "Conf_app.zip" ]; then
-            git add Conf_app.zip
-            git commit -m "🤖 Atualiza Conf_app.zip automaticamente"
-            git push
+            git add -f Conf_app.zip
+            git commit -m "🤖 Atualiza Conf_app.zip automaticamente" || echo "⚠️ Nenhuma mudança para commitar."
+            git push || echo "✅ Push concluído ou sem alterações."
           else
-            echo "⚠️ Nenhum arquivo ZIP encontrado."
+            echo "⚠️ Nenhum arquivo ZIP encontrado após compactação."
+            exit 1
           fi
