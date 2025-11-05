@@ -35,7 +35,7 @@ jobs:
 
           if [ -f "Conf_app.zip" ]; then
             git add -f Conf_app.zip
-            git commit -m "🤖 Atualiza Conf_app.zip automaticamente" || echo "⚠️ Nenhuma mudança para commitar."
+            git commit -m "Atualização "Conf_app.zip" automaticamente" || echo "⚠️ Nenhuma mudança para commitar."
             git push || echo "✅ Push concluído ou sem alterações."
           else
             echo "⚠️ Nenhum arquivo ZIP encontrado após compactação."
