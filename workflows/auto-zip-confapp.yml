@@ -1,0 +1,37 @@
+name: 🔁 AutoZip Conf_app
+
+on:
+  push:
+    paths:
+      - 'Conf_app/**'    # Executa somente se algo dentro da pasta mudar
+    branches:
+      - main             # Ou a branch principal do seu repositório
+
+jobs:
+  zip-confapp:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # Permite subir o ZIP no repositório
+
+    steps:
+      - name: 📥 Clonando repositório
+        uses: actions/checkout@v4
+
+      - name: 🧩 Compactando pasta Conf_app
+        run: |
+          cd Conf_app
+          zip -r ../Conf_app.zip ./*
+          cd ..
+
+      - name: 📤 Commit e push do ZIP gerado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -f "Conf_app.zip" ]; then
+            git add Conf_app.zip
+            git commit -m "🤖 Atualiza Conf_app.zip automaticamente"
+            git push
+          else
+            echo "⚠️ Nenhum arquivo ZIP encontrado."
+          fi
