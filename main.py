@@ -39,16 +39,10 @@ if "Python313" not in sys.executable and os.path.exists(python_exe):
     subprocess.run([python_exe, os.path.abspath(__file__)])
     sys.exit(0)
 
-
-# Configuração de logging (arquivo + console)
-log_path = os.path.join(app_dir, "ssl_patch.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_path, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout)
-    ]
+    stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
 
@@ -121,7 +115,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.0.9"
+VERSAO = "3.1.0"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
@@ -150,52 +144,39 @@ def verificar_atualizacao_disponivel(root=None, frame_status=None):
                 widget.destroy()
 
         if versao_online != versao_local:
-            # Nova versão detectada
+            # Nova versão detectada: atualiza automaticamente
             label = ctk.CTkLabel(
                 frame_status,
-                text=f"🟡 Nova versão disponível: v{versao_online}",
+                text=f"🟡 Baixando atualização v{versao_online}...",
                 text_color="#fff8dc",
                 font=ctk.CTkFont(weight="bold")
             )
-            label.pack(side="left", padx=10, pady=3)
+            label.pack(pady=3)
+            frame_status.update()
+            try:
+                # Baixa o novo main.py
+                r = requests.get(script_url, timeout=15, verify=False)
+                r.raise_for_status()
 
-            def baixar_e_atualizar():
-                try:
-                    label.configure(text="⬇ Baixando atualização...")
-                    btn_update.configure(state="disabled")
+                # Substitui o arquivo local
+                local_path = os.path.join(os.path.dirname(__file__), "main.py")
+                with open(local_path, "wb") as f:
+                    f.write(r.content)
+
+                # Atualiza a versão no arquivo version_local.txt
+                version_local = os.path.join(os.path.dirname(__file__), "version_local.txt")
+                with open(version_local, "w", encoding="utf-8") as vf:
+                    vf.write(versao_online)
+
+                if frame_status:
+                    label.configure(text=f"✅ Atualizado para v{versao_online}. Reiniciando...", text_color="#6BBE3B")
                     frame_status.update()
-
-                    # Baixa o novo main.py
-                    r = requests.get(script_url, timeout=15, verify=False)
-                    r.raise_for_status()
-
-                    # Substitui o arquivo local
-                    local_path = os.path.join(os.path.dirname(__file__), "main.py")
-                    with open(local_path, "wb") as f:
-                        f.write(r.content)
-
-                    # Atualiza a versão no arquivo version_local.txt
-                    version_local = os.path.join(os.path.dirname(__file__), "version_local.txt")
-                    with open(version_local, "w", encoding="utf-8") as vf:
-                        vf.write(versao_online)
-
-                    messagebox.showinfo("Atualização concluída", f"✅ Atualizado para v{versao_online}.\nO app será reiniciado.")
-                    subprocess.Popen(["python", local_path])
-                    os._exit(0)
-                except Exception as e:
-                    messagebox.showerror("Erro", f"⚠️ Falha ao atualizar: {e}")
-
-            btn_update = ctk.CTkButton(
-                frame_status,
-                text="⬇ Atualizar agora",
-                fg_color="#ffaa00",
-                hover_color="#cc8800",
-                text_color="#000000",
-                width=150,
-                command=baixar_e_atualizar
-            )
-            btn_update.pack(side="right", padx=10, pady=3)
-
+                time.sleep(2)
+                subprocess.Popen(["python", local_path])
+                os._exit(0)
+            except Exception as e:
+                if frame_status:
+                    label.configure(text=f"⚠️ Falha ao atualizar: {e}", text_color="#ffcc00")
         else:
             # Já está atualizado
             label = ctk.CTkLabel(
@@ -215,6 +196,7 @@ def verificar_atualizacao_disponivel(root=None, frame_status=None):
                 text=f"⚠️ Falha ao verificar atualização: {e}",
                 text_color="#ffcc00"
             ).pack(pady=3)
+
 
 warnings.filterwarnings(
     "ignore",
