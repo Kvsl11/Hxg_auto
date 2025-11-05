@@ -29,76 +29,6 @@ import sys
 import requests
 import customtkinter as ctk
 
-ssl._create_default_https_context = ssl._create_unverified_context
-requests.packages.urllib3.disable_warnings()
-
-# Ajuste conforme seu repositório
-GITHUB_USER = "Kvsl11"
-REPO_NAME = "Hxg_auto"
-BASE_URL = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/"
-VERSION_FILE = "version.txt"
-SCRIPT_FILE = "main.py"
-LOCAL_VERSION_FILE = os.path.join(os.path.dirname(__file__), "version.txt")
-LOCAL_SCRIPT = os.path.join(os.path.dirname(__file__), "main.py")
-TMP_SCRIPT = os.path.join(os.path.dirname(__file__), "main_new.py")
-
-ssl._create_default_https_context = ssl._create_unverified_context
-requests.packages.urllib3.disable_warnings()
-
-def get_remote_version():
-    try:
-        r = requests.get(BASE_URL + VERSION_FILE, timeout=10, verify=False)
-        if r.status_code == 200:
-            return r.text.strip()
-    except Exception as e:
-        print(f"Erro ao buscar versão remota: {e}")
-    return None
-
-def get_local_version():
-    if os.path.exists(LOCAL_VERSION_FILE):
-        with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return "0.0.0"
-
-def save_local_version(version):
-    with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
-        f.write(version)
-
-def download_main(version):
-    try:
-        r = requests.get(BASE_URL + SCRIPT_FILE, timeout=15, verify=False)
-        r.raise_for_status()
-        with open(TMP_SCRIPT, "wb") as f:
-            f.write(r.content)
-        save_local_version(version)
-        return True
-    except Exception as e:
-        print(f"Falha ao baixar main.py: {e}")
-        return False
-
-def swap_and_restart():
-    # Troca main.py pelo novo, e reinicia
-    for _ in range(5):
-        try:
-            os.remove(LOCAL_SCRIPT)
-            break
-        except PermissionError:
-            time.sleep(1)
-    os.rename(TMP_SCRIPT, LOCAL_SCRIPT)
-    print("Reiniciando na versão nova!")
-    os.execl(sys.executable, sys.executable, LOCAL_SCRIPT)
-
-def atualizar_se_preciso():
-    local_v = get_local_version()
-    remote_v = get_remote_version()
-    print(f"Local: {local_v} | Online: {remote_v}")
-    if remote_v and remote_v != local_v:
-        print("Atualização disponível!")
-        if download_main(remote_v):
-            swap_and_restart()
-        else:
-            print("Falha ao atualizar, rodando versão antiga.")
-
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
 python_exe = os.path.join(app_dir,"Python313", "python.exe")
@@ -109,10 +39,16 @@ if "Python313" not in sys.executable and os.path.exists(python_exe):
     subprocess.run([python_exe, os.path.abspath(__file__)])
     sys.exit(0)
 
+
+# Configuração de logging (arquivo + console)
+log_path = os.path.join(app_dir, "ssl_patch.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    stream=sys.stdout
+    handlers=[
+        logging.FileHandler(log_path, encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -185,7 +121,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.1.1"
+VERSAO = "3.0.9"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """Verifica no GitHub se há nova versão e atualiza automaticamente, se desejado."""
@@ -214,39 +150,52 @@ def verificar_atualizacao_disponivel(root=None, frame_status=None):
                 widget.destroy()
 
         if versao_online != versao_local:
-            # Nova versão detectada: atualiza automaticamente
+            # Nova versão detectada
             label = ctk.CTkLabel(
                 frame_status,
-                text=f"🟡 Baixando atualização v{versao_online}...",
+                text=f"🟡 Nova versão disponível: v{versao_online}",
                 text_color="#fff8dc",
                 font=ctk.CTkFont(weight="bold")
             )
-            label.pack(pady=3)
-            frame_status.update()
-            try:
-                # Baixa o novo main.py
-                r = requests.get(script_url, timeout=15, verify=False)
-                r.raise_for_status()
+            label.pack(side="left", padx=10, pady=3)
 
-                # Substitui o arquivo local
-                local_path = os.path.join(os.path.dirname(__file__), "main.py")
-                with open(local_path, "wb") as f:
-                    f.write(r.content)
-
-                # Atualiza a versão no arquivo version_local.txt
-                version_local = os.path.join(os.path.dirname(__file__), "version_local.txt")
-                with open(version_local, "w", encoding="utf-8") as vf:
-                    vf.write(versao_online)
-
-                if frame_status:
-                    label.configure(text=f"✅ Atualizado para v{versao_online}. Reiniciando...", text_color="#6BBE3B")
+            def baixar_e_atualizar():
+                try:
+                    label.configure(text="⬇ Baixando atualização...")
+                    btn_update.configure(state="disabled")
                     frame_status.update()
-                time.sleep(2)
-                subprocess.Popen(["python", local_path])
-                os._exit(0)
-            except Exception as e:
-                if frame_status:
-                    label.configure(text=f"⚠️ Falha ao atualizar: {e}", text_color="#ffcc00")
+
+                    # Baixa o novo main.py
+                    r = requests.get(script_url, timeout=15, verify=False)
+                    r.raise_for_status()
+
+                    # Substitui o arquivo local
+                    local_path = os.path.join(os.path.dirname(__file__), "main.py")
+                    with open(local_path, "wb") as f:
+                        f.write(r.content)
+
+                    # Atualiza a versão no arquivo version_local.txt
+                    version_local = os.path.join(os.path.dirname(__file__), "version_local.txt")
+                    with open(version_local, "w", encoding="utf-8") as vf:
+                        vf.write(versao_online)
+
+                    messagebox.showinfo("Atualização concluída", f"✅ Atualizado para v{versao_online}.\nO app será reiniciado.")
+                    subprocess.Popen(["python", local_path])
+                    os._exit(0)
+                except Exception as e:
+                    messagebox.showerror("Erro", f"⚠️ Falha ao atualizar: {e}")
+
+            btn_update = ctk.CTkButton(
+                frame_status,
+                text="⬇ Atualizar agora",
+                fg_color="#ffaa00",
+                hover_color="#cc8800",
+                text_color="#000000",
+                width=150,
+                command=baixar_e_atualizar
+            )
+            btn_update.pack(side="right", padx=10, pady=3)
+
         else:
             # Já está atualizado
             label = ctk.CTkLabel(
@@ -266,7 +215,6 @@ def verificar_atualizacao_disponivel(root=None, frame_status=None):
                 text=f"⚠️ Falha ao verificar atualização: {e}",
                 text_color="#ffcc00"
             ).pack(pady=3)
-
 
 warnings.filterwarnings(
     "ignore",
@@ -1068,22 +1016,8 @@ def executar_procedimento(usuario, senha):
     atualizar_progresso("Procedimento finalizado.", step=0, total_steps=1)
     print("🏁 Procedimento finalizado.")
 
-atualizar_se_preciso()
 
 if __name__ == "__main__":
     driver = None
-
-    # Inicializa a janela "root" ANTES para poder mostrar status da atualização se quiser.
-    root = ctk.CTk()  # ou root = tk.Tk() se usar apenas tkinter puro
-    root.withdraw()   # Esconde a janela principal enquanto checa atualização (opcional)
-
-    # Cria um frame pequeno de status, se quiser mostrar barra (opcional)
-    frame_status = ctk.CTkFrame(root)
-    frame_status.pack(pady=10, padx=10)
-
-    # --- VERIFICAÇÃO AUTOMÁTICA DE ATUALIZAÇÃO (SEMPRE AO INICIAR) ---
-    verificar_atualizacao_disponivel(root, frame_status)
-
-    # Agora mostra a interface principal
-    root.deiconify()  # Mostra a janela principal
     criar_interface()
+
