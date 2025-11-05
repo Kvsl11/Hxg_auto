@@ -121,7 +121,7 @@ testar_ssl()
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.1.1"
+VERSAO = "3.1.2"
 
 def verificar_atualizacao_disponivel(root=None, frame_status=None):
     """
