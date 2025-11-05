@@ -29,6 +29,33 @@ import sys
 import requests
 import customtkinter as ctk
 
+ssl._create_default_https_context = ssl._create_unverified_context
+requests.packages.urllib3.disable_warnings()
+
+# Defina os arquivos a atualizar (relativo ao diretório do app)
+ATUALIZAVEIS = {
+    "main.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/main.py",
+    "updater.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/updater.py",
+    "app.py": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/app.py",
+    "iniciar_app.bat": "https://raw.githubusercontent.com/Kvsl11/Hxg_auto/main/iniciar_app.bat"
+}
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def atualizar_todos_arquivos():
+    for nome_arquivo, url in ATUALIZAVEIS.items():
+        local_path = os.path.join(APP_DIR, nome_arquivo)
+        try:
+            print(f"🔄 Baixando {nome_arquivo}...")
+            r = requests.get(url, timeout=20, verify=False)
+            if r.status_code == 200:
+                with open(local_path, "wb") as f:
+                    f.write(r.content)
+                print(f"✅ {nome_arquivo} atualizado.")
+            else:
+                print(f"❌ Falha ao baixar {nome_arquivo}: HTTP {r.status_code}")
+        except Exception as e:
+            print(f"❌ Erro ao atualizar {nome_arquivo}: {e}")
+
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
 python_exe = os.path.join(app_dir,"Python313", "python.exe")
@@ -998,8 +1025,22 @@ def executar_procedimento(usuario, senha):
     atualizar_progresso("Procedimento finalizado.", step=0, total_steps=1)
     print("🏁 Procedimento finalizado.")
 
+atualizar_todos_arquivos()
 
 if __name__ == "__main__":
     driver = None
-    criar_interface()
 
+    # Inicializa a janela "root" ANTES para poder mostrar status da atualização se quiser.
+    root = ctk.CTk()  # ou root = tk.Tk() se usar apenas tkinter puro
+    root.withdraw()   # Esconde a janela principal enquanto checa atualização (opcional)
+
+    # Cria um frame pequeno de status, se quiser mostrar barra (opcional)
+    frame_status = ctk.CTkFrame(root)
+    frame_status.pack(pady=10, padx=10)
+
+    # --- VERIFICAÇÃO AUTOMÁTICA DE ATUALIZAÇÃO (SEMPRE AO INICIAR) ---
+    verificar_atualizacao_disponivel(root, frame_status)
+
+    # Agora mostra a interface principal
+    root.deiconify()  # Mostra a janela principal
+    criar_interface()
