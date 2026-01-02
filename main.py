@@ -150,7 +150,7 @@ logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
 # ... (código existente sem alterações) ...
-VERSAO = "3.1.4"
+VERSAO = "3.1.5"
 
 def verificar_e_atualizar_automaticamente():
 # ... (código existente sem alterações) ...
@@ -527,7 +527,7 @@ def obter_caminho_planilha():
         10: "10 - Outubro", 11: "11 - Novembro", 12: "12 - Dezembro"
     }
 
-    numero_safra = 2.5 + (ano_atual - 2025)
+    numero_safra = 2.5 + (ano_atual - 2025) * 0.1
 # ... (código existente sem alterações) ...
     safra = f"{numero_safra:.1f} - Safra {ano_atual}"
 
