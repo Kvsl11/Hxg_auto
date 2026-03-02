@@ -150,7 +150,7 @@ logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
 # ... (código existente sem alterações) ...
-VERSAO = "3.2.0"
+VERSAO = "3.2.1"
 
 def verificar_e_atualizar_automaticamente():
 # ... (código existente sem alterações) ...
@@ -1216,7 +1216,7 @@ def executar_procedimento(usuario, senha):
             # atualizar_progresso("Limpando cache...", step=1, ...)
 
             atualizar_progresso("Iniciando driver...", step=1, total_steps=TOTAL_STEPS) # Alterado de step=2
-            driver = iniciar_driver(headless=False)
+            driver = iniciar_driver(headless=True)
             
             if not execucao_ativa: break
             
