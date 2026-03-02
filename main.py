@@ -150,7 +150,7 @@ logger.info("✅ Configuração SSL concluída com segurança.")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
 # ... (código existente sem alterações) ...
-VERSAO = "3.1.5"
+VERSAO = "3.2.0"
 
 def verificar_e_atualizar_automaticamente():
 # ... (código existente sem alterações) ...
@@ -344,13 +344,16 @@ def aguardar_pagina_carregada(driver, timeout=30):
         print(f"⚠️ Erro ao aguardar carregamento: {e}")
 
 def aguardar_e_clicar(driver, xpath, timeout=30):
-# ... (código existente sem alterações) ...
     try:
         print(f"Tentando clicar em: {xpath}")
         elemento = WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.XPATH, xpath))
         )
-        driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+        
+        # --- CORREÇÃO DE SCROLL (Element Click Intercepted) ---
+        # Usa block: 'center' para evitar que o elemento fique escondido atrás
+        # de cabeçalhos fixos (como o menu superior) ao rolar a página.
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", elemento)
         
         # AGUARDA A CLICABILIDADE
         WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, xpath)))
@@ -364,7 +367,6 @@ def aguardar_e_clicar(driver, xpath, timeout=30):
         print(f"🟢 Clique realizado: {xpath}")
         logger.info(f"🟢 Clique realizado: {xpath}")
     except Exception as e:
-# ... (código existente sem alterações) ...
         print(f"⚠️ Clique padrão falhou ({xpath}). Tentando via JavaScript... Erro: {e}")
         logger.warning(f"⚠️ Clique padrão falhou ({xpath}). Tentando via JS.")
         try:
@@ -400,29 +402,60 @@ def login_usuario(driver, url, usuario, senha, xpaths):
     time.sleep(3) # Manter este sleep para a página de login processar.
 
 def exportar_tabela(driver, xpaths):
-    aguardar_e_clicar(driver, xpaths['control_room'])
-    
     limpar_filtro_xpath = '//button[contains(@id,"buttion-id-clearAndApplyButton")]'
     aguardar_e_clicar(driver, limpar_filtro_xpath)
     
-    # --- CORREÇÃO HEADLESS 3: ESPERAR OVERLAY SUMIR ---
-    # O log mostrou que um <strong> (provavelmente "Loading...") interceptou
-    # o clique em "Tabela". Vamos esperar ele desaparecer após limpar o filtro.
-    print("⏳ Aguardando overlay de filtro desaparecer...")
+    # --- CORREÇÃO: PAUSAS E ESPERA DE CARREGAMENTO ---
+    print("⏳ Aguardando processamento após limpar o filtro...")
+    
+    # Dá um tempo para o sistema registrar o clique e EXIBIR o ícone/overlay de carregamento
+    # Isso evita que o Selenium verifique a tela antes mesmo do carregamento começar.
+    time.sleep(3) 
+    
     try:
-        # Aumentei o timeout para 20s caso a rede esteja lenta
-        WebDriverWait(driver, 20).until(
-            EC.invisibility_of_element_located((By.XPATH, "//strong[contains(.,'Loading')] | //strong[contains(.,'Carregando')] | //div[contains(@class, 'overlay')]"))
+        # Aguarda até 30s caso a rede ou o sistema estejam lentos para a tabela carregar
+        WebDriverWait(driver, 30).until(
+            EC.invisibility_of_element_located((By.XPATH, "//strong[contains(.,'Loading')] | //strong[contains(.,'Carregando')] | //div[contains(@class, 'overlay')] | //*[contains(@class, 'spinner')]"))
         )
-        print("🟢 Overlay desapareceu.")
+        print("🟢 Overlay de carregamento desapareceu.")
     except Exception as e:
         # Se não encontrar o overlay (ou ele sumir rápido), apenas avisa e continua.
         print(f"⚠️ Não foi possível confirmar o desaparecimento do overlay (ou não havia): {e}")
+    
+    # Espera extra para garantir que os elementos do DOM estão 100% estabilizados e clicáveis
+    time.sleep(3)
     # --- FIM DA CORREÇÃO ---
     
     aguardar_e_clicar(driver, xpaths['tabela'])
+    
+    # --- NOVA ESPERA: AGUARDAR TABELA CARREGAR ---
+    print("⏳ Aguardando a tabela carregar...")
+    time.sleep(3) # Tempo para o carregamento da tabela iniciar na tela
+    
+    try:
+        WebDriverWait(driver, 30).until(
+            EC.invisibility_of_element_located((By.XPATH, "//strong[contains(.,'Loading')] | //strong[contains(.,'Carregando')] | //div[contains(@class, 'overlay')] | //*[contains(@class, 'spinner')]"))
+        )
+        print("🟢 Tabela carregada com sucesso.")
+    except Exception as e:
+        print(f"⚠️ Não foi possível confirmar o carregamento da tabela: {e}")
+        
+    time.sleep(2) # Pausa extra para garantir a estabilidade dos botões da tabela
+    # --- FIM NOVA ESPERA ---
+    
+    # --- NOVOS CLIQUES: ALTERAR PAGINAÇÃO ---
+    print("🔄 Alterando paginação para exibir mais itens...")
+    aguardar_e_clicar(driver, xpaths['paginador_dropdown'])
+    time.sleep(1) # Aguarda a lista suspensa abrir
+    
+    aguardar_e_clicar(driver, xpaths['paginador_opcao_5'])
+    print("⏳ Aguardando tabela recarregar com nova paginação...")
+    time.sleep(4) # Pausa para garantir que a tabela recarregou com as novas linhas
+    # --- FIM DOS CLIQUES DE PAGINAÇÃO ---
+
     aguardar_e_clicar(driver, xpaths['filtro'])
     time.sleep(2)
+    
     aguardar_e_clicar(driver, xpaths['exportacao_csv'])
     print("🟢 Exportação iniciada")
 
@@ -1160,25 +1193,30 @@ def executar_procedimento(usuario, senha):
             base_responsaveis_path = os.path.join(script_dir, "Base - Respon.xlsx")
             pdf_output_dir = os.path.join(script_dir, "PDF_Saida")
 
+            # --- XPATHS ATUALIZADOS E FLEXÍVEIS ---
+            # Removemos a dependência dos IDs 'pn_id_XX' que quebravam o script.
+            # Agora ele procura pelas próprias tags e classes (como 'p-paginator' e 'p-table')
             xpaths = {
-# ... (código existente sem alterações) ...
-                'usuario': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[3]/form/div[1]/input',
-                'senha': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[3]/form/div[2]/input',
-                'botao_login': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[3]/form/div[3]/p-button/button/span',
-                'control_room': '/html/body/app-root/app-home/div/div/div[1]/div[1]/div/div/div/div/div[3]/a[1]',
-                'limpar_filtro': '//button[contains(@id,"buttion-id-clearAndApplyButton")]',
+                'usuario': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[2]/form/div[1]/input',
+                'senha': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[2]/form/div[2]/input',
+                'botao_login': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[2]/form/div[4]/p-button/button',
+                'limpar_filtro': '//*[@id="buttion-id-clearAndApplyButton"]/div/app-text/div',
                 'tabela': '//*[@id="div-submenu-link-id-app-submenu-link-mon-table-id"]/p',
-                'filtro': '//*[@id="pn_id_5"]/div[1]/div/div[2]/button[3]',
-                'exportacao_csv': '//*[@id="pn_id_5"]/div[1]/div/div[2]/button[1]/i'
+                
+                # Novos XPaths que não quebram ao recarregar a página
+                'paginador_dropdown': '//p-paginator//p-dropdown | //*[starts-with(@id, "pn_id_") and contains(@id, "label")]',
+                'paginador_opcao_5': '//p-dropdownitem[5]/li',
+                'filtro': '//p-table//div[1]/div/div[2]/button[3] | //*[starts-with(@id, "pn_id_")]/div[1]/div/div[2]/button[3]',
+                'exportacao_csv': '//p-table//div[1]/div/div[2]/button[1] | //*[starts-with(@id, "pn_id_")]/div[1]/div/div[2]/button[1]'
             }
-            url = "https://access.hxgnagron.com/"
+            url = 'https://access.hxgnagron.com/?redirect=http:%2F%2Fcontrolroom.hxgnagron.com%2F#/'
             
             # --- ETAPA DE LIMPEZA DE CACHE REMOVIDA ---
 # ... (código existente sem alterações) ...
             # atualizar_progresso("Limpando cache...", step=1, ...)
 
             atualizar_progresso("Iniciando driver...", step=1, total_steps=TOTAL_STEPS) # Alterado de step=2
-            driver = iniciar_driver(headless=True)
+            driver = iniciar_driver(headless=False)
             
             if not execucao_ativa: break
             
