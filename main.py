@@ -42,7 +42,6 @@ print(f"🟢 Usando Python em: {python_exe}")
 # A lógica de relançar com o Python interno foi removida,
 # pois estava causando a falha na atualização de dependências.
 
-
 # Configuração de logging (apenas console - Log do SSL removido)
 logging.basicConfig(
     level=logging.INFO,
@@ -148,9 +147,49 @@ except Exception as e:
 
 logger.info("✅ Configuração SSL concluída com segurança.")
 
+# ==========================================
+# --- VERIFICAÇÃO DE SEGURANÇA (KILL SWITCH) ---
+# ==========================================
+def exibir_erro_fatal(titulo, mensagem):
+    """Exibe uma janela de erro travada na tela e fecha o programa."""
+    root_temp = tk.Tk()
+    root_temp.withdraw()
+    root_temp.attributes("-topmost", True) # Garante que a mensagem apareça em cima de tudo
+    messagebox.showerror(titulo, mensagem)
+    root_temp.destroy()
+    os._exit(1)
+
+def verificar_seguranca():
+    """
+    Verifica a trava de segurança (status.txt).
+    Bloqueia o app caso esteja desativado remotamente, exibindo um erro técnico falso.
+    """
+    try:
+        REPO = "Kvsl11/Hxg_auto"
+        # BURLADOR DE CACHE: Adiciona o timestamp na URL para pegar sempre a última alteração na hora
+        ts = int(time.time()) 
+        URL_STATUS = f"https://raw.githubusercontent.com/{REPO}/main/status.txt?t={ts}"
+
+        # 1. VERIFICAR A TRAVA DE SEGURANÇA (KILL SWITCH)
+        try:
+            headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+            r_status = requests.get(URL_STATUS, timeout=10, verify=False, headers=headers)
+            if r_status.status_code == 200:
+                status_app = r_status.text.strip().lower()
+                if status_app == "false":
+                    logger.warning("🔴 TRAVA ATIVADA VIA GITHUB! Bloqueando acesso.")
+                    exibir_erro_fatal("Erro Crítico de Comunicação", "Ocorreu uma falha inesperada ao sincronizar as configurações iniciais do sistema.\n\nCódigo do Erro: ERR_CONNECTION_REFUSED_10061\nPor favor, tente novamente mais tarde.")
+            else:
+                logger.info(f"⚠️ Status remoto retornou código {r_status.status_code}. Execução permitida.")
+        except Exception as e:
+            logger.warning(f"⚠️ Falha ao checar status.txt (Internet/GitHub fora do ar). Ignorando trava. Erro: {e}")
+
+    except Exception as e:
+        logger.error(f"❌ Erro na rotina de segurança: {e}")
+
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
 # ... (código existente sem alterações) ...
-VERSAO = "3.2.1"
+VERSAO = "3.2.3"
 
 def verificar_e_atualizar_automaticamente():
 # ... (código existente sem alterações) ...
@@ -1306,6 +1345,9 @@ def executar_procedimento(usuario, senha):
 
 
 if __name__ == "__main__":
+    # --- VERIFICAÇÃO DA TRAVA DE SEGURANÇA (KILL SWITCH) ---
+    verificar_seguranca()
+
 # ... (código existente sem alterações) ...
     driver = None
     criar_interface()
