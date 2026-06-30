@@ -1082,7 +1082,7 @@ def executar_procedimento(usuario, senha):
 
         try:
             diretorio_downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-            pdf_output_dir = os.path.join(script_dir, "PDF_Saida")
+            pdf_output_dir = os.path.join(script_dir, "Contingência_Saida")
 
             xpaths = {
                 'usuario': '/html/body/app-root/app-login/app-access-container/div/div[2]/div[2]/form/div[1]/input',
