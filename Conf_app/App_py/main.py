@@ -1,21 +1,17 @@
 import threading
 import glob
 import pandas as pd
-# --- MODIFICAÇÕES DE IMPORTAÇÃO ---
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from openpyxl import load_workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.styles.borders import Border, Side
 import datetime
 from fpdf import FPDF
 import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk
-from PIL import Image, ImageTk
 import time
 import fitz
 import json
@@ -27,8 +23,9 @@ import urllib.request
 import logging
 import sys
 import requests
-import customtkinter as ctk
 import shutil
+import xlwings as xw
+import certifi
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,8 +70,6 @@ def preparar_dependencias():
             logger.info(f"Instalando/Atualizando {pacote}...")
             subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", pacote], check=True, capture_output=True,
                            text=True)
-
-        import certifi
         logger.info(f"🟢 Dependências atualizadas com sucesso. Caminho Certifi: {certifi.where()}")
     except Exception as e:
         logger.warning(f"⚠️ Falha ao preparar dependências: {e}")
@@ -82,7 +77,6 @@ def preparar_dependencias():
 def garantire_certificados_amazon():
     """Verifica se o certificado raiz da Amazon está presente e adiciona se necessário."""
     try:
-        import certifi
         cacert_path = certifi.where()
 
         with open(cacert_path, "r", encoding="utf-8") as f:
@@ -109,7 +103,6 @@ preparar_dependencias()
 garantire_certificados_amazon()
 
 try:
-    import certifi
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     urllib.request.urlopen("https://www.google.com", timeout=5, context=ssl_context)
     logger.info("🟢 Conexão SSL validada com sucesso — certificados OK.")
@@ -124,9 +117,6 @@ except Exception as e:
 
 logger.info("✅ Configuração SSL concluída com segurança.")
 
-# ==========================================
-# --- VERIFICAÇÃO DE SEGURANÇA (KILL SWITCH) ---
-# ==========================================
 def exibir_erro_fatal(titulo, mensagem):
     """Exibe uma janela de erro travada na tela e fecha o programa."""
     root_temp = tk.Tk()
@@ -135,7 +125,6 @@ def exibir_erro_fatal(titulo, mensagem):
     messagebox.showerror(titulo, mensagem)
     root_temp.destroy()
     os._exit(1)
-
 
 def verificar_seguranca():
     """Verifica a trava de segurança remoto."""
@@ -161,8 +150,7 @@ def verificar_seguranca():
         logger.error(f"❌ Erro na rotina de segurança: {e}")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.3.0"
-
+VERSAO = "3.2.9"
 
 def verificar_e_atualizar_automaticamente():
     """Verifica no GitHub se há nova versão e atualiza automaticamente."""
@@ -452,7 +440,6 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         # --- NOVO: Leitura via xlwings para forçar o cálculo das fórmulas ---
         print("⏳ Inicializando motor Excel nativo para extrair os valores reais das fórmulas...")
         try:
-            import xlwings as xw
             app = xw.App(visible=False)
             app.display_alerts = False
             try:
@@ -552,9 +539,6 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
 
 # --- SISTEMA DE FECHAMENTO (Dia 21 a 20 do próximo mês) ---
 def obter_caminho_planilha():
-    import os
-    import datetime
-
     hoje = datetime.datetime.now()
     dia_atual = hoje.day
     mes_atual = hoje.month
@@ -605,7 +589,6 @@ def atualizar_coleta_planilha(df_final):
     seu cache de memória (bug conhecido do openpyxl ao usar 'wb.save()').
     """
     try:
-        import xlwings as xw
         caminho_planilha = obter_caminho_planilha()
         aba_alvo = "Cont. Maquinas"
 
@@ -750,7 +733,7 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
         responsaveis_para_gerar = df_filtrado['RESPONSAVEL'].unique()
         data_hora_geracao = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
 
-        COR_PRIMARIA = (60, 100, 160)
+        COR_PRIMARIA = (18, 71, 51)
         COR_SECUNDARIA = (240, 240, 240)
 
         for responsavel in responsaveis_para_gerar:
@@ -759,7 +742,7 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
                 print(f"⚠️ Não há dados para o responsável: {responsavel}.")
                 continue
 
-            pdf = FPDF(format='letter')
+            pdf = FPDF(format='A4', unit='mm')
             pdf.set_auto_page_break(auto=True, margin=15)
             pdf.add_page()
 
@@ -774,7 +757,7 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
 
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, f'Responsável: {responsavel}', ln=1, align='L')
+            pdf.cell(0, 10, f'Resp.: {responsavel}', ln=1, align='L')
             pdf.set_font("Arial", '', 8)
             pdf.cell(0, 5, f'Relatório gerado em: {data_hora_geracao}', ln=1, align='L')
             pdf.ln(5)
