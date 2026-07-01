@@ -150,7 +150,7 @@ def verificar_seguranca():
         logger.error(f"❌ Erro na rotina de segurança: {e}")
 
 # --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.2.9"
+VERSAO = "3.3.1"
 
 def verificar_e_atualizar_automaticamente():
     """Verifica no GitHub se há nova versão e atualiza automaticamente."""
@@ -565,7 +565,7 @@ def obter_caminho_planilha():
     numero_safra = 2.5 + (ano_alvo - 2025) * 0.1
     safra = f"{numero_safra:.1f} - Safra {ano_alvo}"
 
-    possiveis_drives = ["I:", "Z:"]
+    possiveis_drives = ["A:", "Z:"]
     caminho_final = None
 
     for drive in possiveis_drives:
