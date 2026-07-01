@@ -1,8 +1,7 @@
 import threading
 import glob
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -68,7 +67,8 @@ def preparar_dependencias():
         # --- LISTA COMPLETA DE DEPENDÊNCIAS ATUALIZADAS ---
         pacotes = [
             "certifi", "selenium", "xlwings", "pandas", 
-            "openpyxl", "fpdf2", "ttkbootstrap", "requests"
+            "openpyxl", "fpdf2", "ttkbootstrap", "requests",
+            "undetected-chromedriver"
         ]
         logger.info(f"🔍 Verificando e atualizando pacotes vitais...")
 
@@ -150,7 +150,7 @@ def verificar_seguranca():
     except Exception as e:
         logger.error(f"❌ Erro na rotina de segurança: {e}")
 
-VERSAO = "3.4.0"
+VERSAO = "3.4.2"
 
 warnings.filterwarnings(
     "ignore",
@@ -171,12 +171,44 @@ RESPONSAVEIS_OPCOES = [
     "ALEX FABIANO", "RAMON ROSA"
 ]
 
-def iniciar_driver(headless=True):
-    """Inicia uma instância do Chrome preparada para downloads em background."""
-    print(f"🚀 Iniciando driver (Headless={headless}) com Selenium padrão (SeleniumManager)...")
-    logger.info(f"🚀 Iniciando driver (Headless={headless}) com Selenium padrão (SeleniumManager)...")
+def obter_versao_chrome_windows():
+    """Tenta ler dinamicamente a versão principal instalada do Google Chrome no registro do Windows."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        paths = [
+            (winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon"),
+            (winreg.HKEY_LOCAL_MACHINE, r"Software\Google\Chrome\BLBeacon"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome")
+        ]
+        for hkey, path in paths:
+            try:
+                key = winreg.OpenKey(hkey, path)
+                try:
+                    version, _ = winreg.QueryValueEx(key, "version")
+                except FileNotFoundError:
+                    try:
+                        version, _ = winreg.QueryValueEx(key, "DisplayVersion")
+                    except FileNotFoundError:
+                        version, _ = winreg.QueryValueEx(key, "Version")
+                winreg.CloseKey(key)
+                if version:
+                    major_version = int(version.split(".")[0])
+                    print(f"🔍 Versão do Chrome detectada no Windows: {major_version} ({version})")
+                    return major_version
+            except Exception:
+                continue
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao tentar ler o Registro do Windows para o Chrome: {e}")
+    return None
 
-    options = webdriver.ChromeOptions()
+def iniciar_driver(headless=True):
+    """Inicia uma instância do Chrome preparada para downloads em background usando undetected_chromedriver."""
+    print(f"🚀 Iniciando driver (Headless={headless}) com undetected_chromedriver...")
+    logger.info(f"🚀 Iniciando driver (Headless={headless}) com undetected_chromedriver...")
+
+    options = uc.ChromeOptions()
     
     # --- PERMITIR DOWNLOADS NO HEADLESS ---
     download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
@@ -196,6 +228,9 @@ def iniciar_driver(headless=True):
     options.add_argument("--disable-extensions")
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-software-rasterizer")
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--allow-running-insecure-content')
+    options.add_argument('--disable-web-security')
 
     if headless:
         options.add_argument("--headless=new") # Força a nova engine Headless
@@ -205,17 +240,18 @@ def iniciar_driver(headless=True):
         temp_dir = tempfile.mkdtemp(prefix="selenium_hxg_")
         options.add_argument(f"--user-data-dir={temp_dir}")
 
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--allow-running-insecure-content')
-    options.add_argument('--disable-web-security')
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    # Obter a versão majoritária instalada localmente do Google Chrome
+    chrome_major_version = obter_versao_chrome_windows()
 
     try:
-        servico = Service()
-        driver = webdriver.Chrome(service=servico, options=options)
+        if chrome_major_version:
+            # Força o undetected_chromedriver a buscar o driver compatível com a versão instalada
+            driver = uc.Chrome(options=options, headless=headless, version_main=chrome_major_version)
+        else:
+            driver = uc.Chrome(options=options, headless=headless)
     except Exception as e:
-        print(f"❌ Falha ao iniciar Selenium/SeleniumManager: {e}")
-        logger.error(f"❌ Falha ao iniciar Selenium/SeleniumManager: {e}")
+        print(f"❌ Falha ao iniciar undetected_chromedriver: {e}")
+        logger.error(f"❌ Falha ao iniciar undetected_chromedriver: {e}")
         raise
 
     if not headless:
@@ -339,7 +375,7 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         df.columns = df.columns.str.strip().str.upper()
         
         df["REGISTRO MAIS RECENTE"] = pd.to_datetime(df["REGISTRO MAIS RECENTE"], format="%d/%m/%Y %H:%M:%S",
-                                                     errors="coerce")
+                                                    errors="coerce")
 
         try:
             if os.path.exists(csv_path):
@@ -463,7 +499,7 @@ def obter_caminho_planilha():
     # --- CAMINHO DE REDE (UNC) ---
     possiveis_drives = [
         r"\\192.168.14.150\Departamentos$", 
-        "I:",                               
+        "I:",                                 
         "A:", 
         "Z:", 
         "G:"
@@ -930,18 +966,15 @@ def criar_interface():
     btn_limpar_todos = ttk.Button(ctrl_sel_frame, text="Limpar Seleção", command=limpar_selecao, bootstyle="secondary", width=18)
     btn_limpar_todos.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-    # Grid de 2 colunas para exibição limpa dos 10 responsáveis
+    # Grid de 1 coluna para exibição limpa dos 10 responsáveis
     grid_responsáveis = ttk.Frame(resp_frame)
     grid_responsáveis.pack(fill="both", expand=True)
     grid_responsáveis.columnconfigure(0, weight=1)
-    grid_responsáveis.columnconfigure(1, weight=1)
+    
 
     for indice, (nome, variavel) in enumerate(responsaveis_vars.items()):
-        linha = indice // 2
-        coluna = indice % 2
         chk_resp = ttk.Checkbutton(grid_responsáveis, text=nome, variable=variavel, bootstyle="info-round-toggle")
-        chk_resp.grid(row=linha, column=coluna, sticky="w", padx=10, pady=7)
-
+        chk_resp.grid(row=indice, column=0, sticky="w", padx=10, pady=6)
 
     # --- Painel Inferior de Execução (Barra de Progresso e Botões de Ação) ---
     bottom_frame = ttk.Frame(main_frame)
