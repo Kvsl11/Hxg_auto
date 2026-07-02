@@ -1,8 +1,7 @@
 import threading
 import glob
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,7 +12,6 @@ import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk
 import time
-import fitz
 import json
 import warnings
 import os
@@ -26,6 +24,7 @@ import requests
 import shutil
 import xlwings as xw
 import certifi
+import tempfile
 
 # Caminho dinâmico da pasta onde o script está localizado
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +32,7 @@ app_dir = os.path.dirname(os.path.abspath(__file__))
 python_exe = sys.executable
 print(f"🟢 Usando Python em: {python_exe}")
 
-# Configuração de logging (apenas console - Log do SSL removido)
+# Configuração de logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -60,17 +59,22 @@ def preparar_dependencias():
         if os.path.exists(wdm_cache_path):
             logger.info(f"🧹 Limpando cache antigo do webdriver-manager em: {wdm_cache_path}")
             shutil.rmtree(wdm_cache_path, ignore_errors=True)
-        # --- FIM DA LIMPEZA ---
 
-        # ADICIONADO: 'xlwings' para manipular o Excel sem apagar o cache de fórmulas.
-        pacotes = ["certifi", "selenium", "xlwings"]
-        logger.info(f"🔍 Verificando e atualizando pacotes: {', '.join(pacotes)}...")
+        # --- RESOLVE CONFLITO FPDF / FPDF2 ---
+        logger.info("🧹 Removendo pacotes conflitantes (fpdf legado)...")
+        subprocess.run([python_exe, "-m", "pip", "uninstall", "--yes", "fpdf"], check=False, capture_output=True)
+
+        # --- LISTA COMPLETA DE DEPENDÊNCIAS ATUALIZADAS ---
+        pacotes = [
+            "certifi", "selenium", "xlwings", "pandas", 
+            "openpyxl", "fpdf2", "ttkbootstrap", "requests",
+            "undetected-chromedriver"
+        ]
+        logger.info(f"🔍 Verificando e atualizando pacotes vitais...")
 
         for pacote in pacotes:
-            logger.info(f"Instalando/Atualizando {pacote}...")
-            subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", pacote], check=True, capture_output=True,
-                           text=True)
-        logger.info(f"🟢 Dependências atualizadas com sucesso. Caminho Certifi: {certifi.where()}")
+            subprocess.run([python_exe, "-m", "pip", "install", "--upgrade", pacote], check=False, capture_output=True)
+        logger.info(f"🟢 Dependências verificadas com sucesso.")
     except Exception as e:
         logger.warning(f"⚠️ Falha ao preparar dependências: {e}")
 
@@ -97,7 +101,6 @@ def garantire_certificados_amazon():
     except Exception as e:
         logger.warning(f"⚠️ Falha ao garantir certificado Amazon Root CA 1: {e}")
 
-# --- EXECUÇÃO AUTOMÁTICA AO INICIAR ---
 logger.info("🚀 Iniciando verificação e correção SSL híbrida...")
 preparar_dependencias()
 garantire_certificados_amazon()
@@ -118,7 +121,6 @@ except Exception as e:
 logger.info("✅ Configuração SSL concluída com segurança.")
 
 def exibir_erro_fatal(titulo, mensagem):
-    """Exibe uma janela de erro travada na tela e fecha o programa."""
     root_temp = tk.Tk()
     root_temp.withdraw()
     root_temp.attributes("-topmost", True)
@@ -127,7 +129,6 @@ def exibir_erro_fatal(titulo, mensagem):
     os._exit(1)
 
 def verificar_seguranca():
-    """Verifica a trava de segurança remoto."""
     try:
         REPO = "Kvsl11/Hxg_auto"
         ts = int(time.time())
@@ -149,87 +150,7 @@ def verificar_seguranca():
     except Exception as e:
         logger.error(f"❌ Erro na rotina de segurança: {e}")
 
-# --- VERIFICAÇÃO DE ATUALIZAÇÃO VIA GITHUB ---
-VERSAO = "3.3.1"
-
-def verificar_e_atualizar_automaticamente():
-    """Verifica no GitHub se há nova versão e atualiza automaticamente."""
-    try:
-        REPO = "Kvsl11/Hxg_auto"
-        URL_VERSION = f"https://raw.githubusercontent.com/{REPO}/main/version.txt"
-        URL_SCRIPT = f"https://raw.githubusercontent.com/{REPO}/main/main.py"
-        LOCAL_SCRIPT = os.path.join(os.path.dirname(__file__), "main.py")
-        LOCAL_VERSION_FILE = os.path.join(os.path.dirname(__file__), "version_local.txt")
-        LOG_PATH = os.path.join(os.path.dirname(__file__), "autoupdate.log")
-
-        logging.basicConfig(
-            filename=LOG_PATH,
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s"
-        )
-
-        def get_local_version():
-            if os.path.exists(LOCAL_VERSION_FILE):
-                try:
-                    with open(LOCAL_VERSION_FILE, "r", encoding="utf-8") as f:
-                        return f.read().strip()
-                except Exception:
-                    return "0.0.0"
-            return "0.0.0"
-
-        def get_online_version():
-            try:
-                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
-                r = requests.get(URL_VERSION, timeout=10, verify=False, headers=headers)
-                if r.status_code == 200:
-                    return r.text.strip()
-                else:
-                    logging.warning(f"⚠️ Falha HTTP ao buscar versão: {r.status_code}")
-            except Exception as e:
-                logging.warning(f"⚠️ Falha ao obter versão online: {e}")
-            return None
-
-        def save_local_version(ver):
-            try:
-                with open(LOCAL_VERSION_FILE, "w", encoding="utf-8") as f:
-                    f.write(ver)
-                logging.info(f"✅ Versão local atualizada para {ver}")
-            except Exception as e:
-                logging.error(f"❌ Erro ao salvar versão local: {e}")
-
-        def atualizar_script(versao_online):
-            try:
-                headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
-                r = requests.get(URL_SCRIPT, timeout=20, verify=False, headers=headers)
-                r.raise_for_status()
-                with open(LOCAL_SCRIPT, "wb") as f:
-                    f.write(r.content)
-                save_local_version(versao_online)
-                logging.info(f"✅ Atualização concluída para a versão {versao_online}")
-                return True
-            except Exception as e:
-                logging.error(f"❌ Falha ao atualizar script: {e}")
-                return False
-
-        local_v = get_local_version()
-        online_v = get_online_version()
-
-        if not online_v:
-            logging.warning("⚠️ Falha ao verificar versão online. Continuando com a versão local.")
-            return
-
-        if online_v != local_v:
-            logging.info(f"🟡 Nova versão detectada: {online_v} (local: {local_v}) — atualizando...")
-            sucesso = atualizar_script(online_v)
-            if sucesso:
-                logging.info("♻️ Reiniciando app com nova versão...")
-                python_exe = sys.executable
-                subprocess.Popen([python_exe, LOCAL_SCRIPT])
-                os._exit(0)
-            else:
-                logging.info(f"🟢 Aplicativo já está atualizado ({local_v})")
-    except Exception as e:
-        logging.error(f"❌ Erro na verificação automática de atualização: {e}")
+VERSAO = "3.4.5"
 
 warnings.filterwarnings(
     "ignore",
@@ -238,49 +159,100 @@ warnings.filterwarnings(
     module=r"openpyxl\.worksheet\._reader"
 )
 
-# --- Definições Globais ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 execucao_ativa = False
 status_label = None
 progress_bar = None
 root = None
 
+# Lista padrão que servirá como backup caso a rede caia ou o arquivo Excel esteja inacessível
 RESPONSAVEIS_OPCOES = [
-    "JUAN CARLOS",
-    "ROSANI ALDA",
-    "FERNANDO BREGUEDO",
-    "FLAVIO BREGUEDO",
-    "EDUARDO APARECIDO",
-    "LEANDRO RENE",
-    "EDUARDO NUNES",
-    "LEANDRO SEBOLD",
-    "ALEX FABIANO",
-    "RAMON ROSA"
+    "JUAN CARLOS", "ROSANI ALDA", "FERNANDO BREGUEDO", "FLAVIO BREGUEDO",
+    "EDUARDO APARECIDO", "LEANDRO RENE", "EDUARDO NUNES", "LEANDRO SEBOLD",
+    "ALEX FABIANO", "RAMON ROSA"
 ]
 
-# --- Funções de Automação com Selenium ---
+def obter_versao_chrome_windows():
+    """Tenta ler dinamicamente a versão principal instalada do Google Chrome no registro do Windows."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        paths = [
+            (winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon"),
+            (winreg.HKEY_LOCAL_MACHINE, r"Software\Google\Chrome\BLBeacon"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome")
+        ]
+        for hkey, path in paths:
+            try:
+                key = winreg.OpenKey(hkey, path)
+                try:
+                    version, _ = winreg.QueryValueEx(key, "version")
+                except FileNotFoundError:
+                    try:
+                        version, _ = winreg.QueryValueEx(key, "DisplayVersion")
+                    except FileNotFoundError:
+                        version, _ = winreg.QueryValueEx(key, "Version")
+                winreg.CloseKey(key)
+                if version:
+                    major_version = int(version.split(".")[0])
+                    print(f"🔍 Versão do Chrome detectada no Windows: {major_version} ({version})")
+                    return major_version
+            except Exception:
+                continue
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao tentar ler o Registro do Windows para o Chrome: {e}")
+    return None
+
 def iniciar_driver(headless=True):
-    """Inicia uma instância do Chrome usando Selenium padrão e o SeleniumManager embutido."""
-    print("🚀 Iniciando driver com Selenium padrão (SeleniumManager)...")
-    logger.info("🚀 Iniciando driver com Selenium padrão (SeleniumManager)...")
+    """Inicia uma instância do Chrome preparada para downloads em background usando undetected_chromedriver."""
+    print(f"🚀 Iniciando driver (Headless={headless}) com undetected_chromedriver...")
+    logger.info(f"🚀 Iniciando driver (Headless={headless}) com undetected_chromedriver...")
 
-    options = webdriver.ChromeOptions()
-    if headless:
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920,1080")
+    options = uc.ChromeOptions()
+    
+    # --- PERMITIR DOWNLOADS NO HEADLESS ---
+    download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    prefs = {
+        "download.default_directory": download_dir,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True, # Vital para headless
+        "profile.default_content_setting_values.automatic_downloads": 1
+    }
+    options.add_experimental_option("prefs", prefs)
 
+    # --- PARÂMETROS CRÍTICOS CONTRA CRASH E DEVTOOLS NO WINDOWS ---
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--allow-running-insecure-content')
     options.add_argument('--disable-web-security')
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+
+    if headless:
+        options.add_argument("--headless=new") # Força a nova engine Headless
+        options.add_argument("--window-size=1920,1080")
+        
+        # Gera uma pasta temporária única para esta sessão (evita conflitos de arquivos de cache bloqueados)
+        temp_dir = tempfile.mkdtemp(prefix="selenium_hxg_")
+        options.add_argument(f"--user-data-dir={temp_dir}")
+
+    # Obter a versão majoritária instalada localmente do Google Chrome
+    chrome_major_version = obter_versao_chrome_windows()
 
     try:
-        servico = Service()
-        driver = webdriver.Chrome(service=servico, options=options)
+        if chrome_major_version:
+            # Força o undetected_chromedriver a buscar o driver compatível com a versão instalada
+            driver = uc.Chrome(options=options, headless=headless, version_main=chrome_major_version)
+        else:
+            driver = uc.Chrome(options=options, headless=headless)
     except Exception as e:
-        print(f"❌ Falha ao iniciar Selenium/SeleniumManager: {e}")
-        logger.error(f"❌ Falha ao iniciar Selenium/SeleniumManager: {e}")
+        print(f"❌ Falha ao iniciar undetected_chromedriver: {e}")
+        logger.error(f"❌ Falha ao iniciar undetected_chromedriver: {e}")
         raise
 
     if not headless:
@@ -307,18 +279,14 @@ def aguardar_e_clicar(driver, xpath, timeout=30):
         time.sleep(0.5)
         elemento.click()
         print(f"🟢 Clique realizado: {xpath}")
-        logger.info(f"🟢 Clique realizado: {xpath}")
     except Exception as e:
-        print(f"⚠️ Clique padrão falhou ({xpath}). Tentando via JavaScript... Erro: {e}")
         logger.warning(f"⚠️ Clique padrão falhou ({xpath}). Tentando via JS.")
         try:
             elemento = driver.find_element(By.XPATH, xpath)
             driver.execute_script("arguments[0].click();", elemento)
             print(f"🟢 Clique via JS realizado: {xpath}")
-            logger.info(f"🟢 Clique via JS realizado: {xpath}")
         except Exception as js_e:
             print(f"❌ Erro final ao clicar via JS em {xpath}: {js_e}")
-            logger.error(f"❌ Erro final ao clicar via JS em {xpath}: {js_e}")
 
 def aguardar_e_escrever(driver, xpath, texto, timeout=30):
     try:
@@ -351,14 +319,11 @@ def exportar_tabela(driver, xpaths):
             EC.invisibility_of_element_located((By.XPATH,
                                                 "//strong[contains(.,'Loading')] | //strong[contains(.,'Carregando')] | //div[contains(@class, 'overlay')] | //*[contains(@class, 'spinner')]"))
         )
-        print("🟢 Overlay de carregamento desapareceu.")
     except Exception as e:
         print(f"⚠️ Não foi possível confirmar o desaparecimento do overlay (ou não havia): {e}")
 
     time.sleep(3)
     aguardar_e_clicar(driver, xpaths['tabela'])
-
-    print("⏳ Aguardando a tabela carregar...")
     time.sleep(3)
 
     try:
@@ -366,18 +331,15 @@ def exportar_tabela(driver, xpaths):
             EC.invisibility_of_element_located((By.XPATH,
                                                 "//strong[contains(.,'Loading')] | //strong[contains(.,'Carregando')] | //div[contains(@class, 'overlay')] | //*[contains(@class, 'spinner')]"))
         )
-        print("🟢 Tabela carregada com sucesso.")
-    except Exception as e:
-        print(f"⚠️ Não foi possível confirmar o carregamento da tabela: {e}")
+    except Exception:
+        pass
 
     time.sleep(2)
-
     print("🔄 Alterando paginação para exibir mais itens...")
     aguardar_e_clicar(driver, xpaths['paginador_dropdown'])
     time.sleep(1)
 
     aguardar_e_clicar(driver, xpaths['paginador_opcao_5'])
-    print("⏳ Aguardando tabela recarregar com nova paginação...")
     time.sleep(4)
 
     aguardar_e_clicar(driver, xpaths['filtro'])
@@ -400,11 +362,6 @@ def aguardar_download_completo(diretorio, nome_base, timeout=60):
     return None
 
 def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
-    """
-    Processa o CSV exportado do Hexagon.
-    Abre a planilha de monitoramento utilizando XLWINGS para ler o valor final calculado 
-    pelas fórmulas (PROCV, etc), ignorando o cache do openpyxl que pode estar quebrado.
-    """
     try:
         if not os.path.exists(pdf_output_dir):
             os.makedirs(pdf_output_dir)
@@ -415,18 +372,16 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
             print("❌ Processo encerrado. Nenhum arquivo CSV disponível.")
             return None
 
-        # Carrega o CSV do Hexagon
         df = pd.read_csv(csv_path, encoding="utf-8", sep=";", dtype=str)
         df.columns = df.columns.str.strip().str.upper()
         
         df["REGISTRO MAIS RECENTE"] = pd.to_datetime(df["REGISTRO MAIS RECENTE"], format="%d/%m/%Y %H:%M:%S",
-                                                     errors="coerce")
+                                                    errors="coerce")
 
-        # Exclui o CSV baixado para não encher a pasta do usuário
         try:
             if os.path.exists(csv_path):
                 os.remove(csv_path)
-        except Exception as clean_err:
+        except Exception:
             pass
 
         data_atual = datetime.datetime.now().date()
@@ -437,35 +392,36 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         
         df_responsaveis = None
         
-        # --- NOVO: Leitura via xlwings para forçar o cálculo das fórmulas ---
         print("⏳ Inicializando motor Excel nativo para extrair os valores reais das fórmulas...")
         try:
             app = xw.App(visible=False)
             app.display_alerts = False
             try:
-                # read_only=True garante velocidade e segurança
                 wb = app.books.open(caminho_base_monitoramento, update_links=False, read_only=True)
                 ws = wb.sheets["Cont. Maquinas"]
-                
-                # Extrai todos os dados da aba, já formatados como um DataFrame do Pandas
-                # O atributo .value no xlwings traz SEMPRE o resultado da fórmula em texto/número
                 df_responsaveis = ws.used_range.options(pd.DataFrame, index=False).value
                 print("✅ Valores reais das fórmulas extraídos com sucesso!")
             finally:
                 if 'wb' in locals() and wb: wb.close()
                 if 'app' in locals() and app: app.quit()
         except Exception as ex:
-            print(f"⚠️ Aviso: Não foi possível usar o motor nativo ({ex}). Tentando via pandas padrão...")
+            print(f"⚠️ Aviso: Não foi possível usar o motor nativo ({ex}). Tentando via openpyxl com data_only...")
             
-        # Fallback caso o xlwings falhe por algum motivo (ex: Excel não instalado)
         if df_responsaveis is None or df_responsaveis.empty:
+            df_responsaveis = ler_planilha_com_formulas(caminho_base_monitoramento, "Cont. Maquinas")
+            
+        if df_responsaveis is None or df_responsaveis.empty:
+            print("⚠️ openpyxl falhou. Tentando via pandas padrão...")
             df_responsaveis = pd.read_excel(caminho_base_monitoramento, sheet_name="Cont. Maquinas")
         
-        # Normalização rigorosa dos cabeçalhos do Excel
+        # Tratamento rigoroso de acentuações e caracteres especiais nos cabeçalhos da planilha
         normalized_cols = {}
         for col in df_responsaveis.columns:
             clean_col = str(col).strip().upper()
             clean_col = clean_col.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+            clean_col = clean_col.replace('Â', 'A').replace('Ê', 'E').replace('Î', 'I').replace('Ô', 'O').replace('Û', 'U')
+            clean_col = clean_col.replace('Ã', 'A').replace('Õ', 'O')
+            clean_col = clean_col.replace('Ç', 'C')
             normalized_cols[col] = clean_col
         df_responsaveis = df_responsaveis.rename(columns=normalized_cols)
 
@@ -474,30 +430,33 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         col_responsavel = "RESPONSAVEL"
         col_display = "DISPLAY"
         col_prestador = "PRESTADOR"
+        col_tipo_excel = "TIPO"
+        col_tipo_csv = "TIPO DO EQUIPAMENTO"
 
         if col_equipamento_base not in df_responsaveis.columns:
             print(f"⚠️ A coluna '{col_equipamento_base}' não foi encontrada na aba 'Cont. Maquinas'!")
             return None
 
-        # Renomeia EQUIPAMENTO para NRO DO EQUIPAMENTO para preparar o Merge
         df_responsaveis = df_responsaveis.rename(columns={col_equipamento_base: col_equipamento_csv})
 
-        # Prevenção rigorosa: transforma Frotas para garantir precisão no Match
+        # Limpeza e remoção de floats .0 para um cruzamento seguro dos códigos das máquinas
         df_antigos[col_equipamento_csv] = df_antigos[col_equipamento_csv].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df_responsaveis[col_equipamento_csv] = df_responsaveis[col_equipamento_csv].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
 
-        # Higieniza os valores numéricos originados de fórmulas para não ficarem como '.0' ou nulos indesejados
-        for col in [col_responsavel, col_display, col_prestador]:
+        # Remove linhas que não possuam número de equipamento associado
+        df_responsaveis = df_responsaveis.dropna(subset=[col_equipamento_csv])
+        df_responsaveis = df_responsaveis[df_responsaveis[col_equipamento_csv].astype(str).str.strip() != ""]
+
+        for col in [col_responsavel, col_display, col_prestador, col_tipo_excel]:
             if col in df_responsaveis.columns:
                 df_responsaveis[col] = df_responsaveis[col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
                 df_responsaveis[col] = df_responsaveis[col].replace({'nan': '', 'None': '', '<NA>': ''})
 
         colunas_necessarias = [col_equipamento_csv]
-        for c in [col_responsavel, col_display, col_prestador]:
+        for c in [col_responsavel, col_display, col_prestador, col_tipo_excel]:
             if c in df_responsaveis.columns:
                 colunas_necessarias.append(c)
 
-        # Merge utilizando SUFFIXES para não conflitar com colunas vazias do CSV
         df_final = df_antigos.merge(
             df_responsaveis[colunas_necessarias], 
             on=col_equipamento_csv, 
@@ -505,24 +464,34 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
             suffixes=('_CSV', '_EXCEL')
         )
         
-        # Consolida forçando que a coluna final seja sempre a do Excel!
+        # Atribui os dados provenientes da planilha (Excel) que contém a prioridade dos responsáveis
         for c in [col_responsavel, col_display, col_prestador]:
             if f"{c}_EXCEL" in df_final.columns:
                 df_final[c] = df_final[f"{c}_EXCEL"]
+            elif f"{c}_CSV" in df_final.columns:
+                df_final[c] = df_final[f"{c}_CSV"]
 
-        # Filtro de Responsável Vazio / Nulo
+        # Faz o mapeamento da coluna "TIPO" da planilha para "TIPO DO EQUIPAMENTO" do relatório gerado
+        if col_tipo_excel in df_final.columns:
+            df_final[col_tipo_csv] = df_final[col_tipo_excel]
+        elif f"{col_tipo_excel}_EXCEL" in df_final.columns:
+            df_final[col_tipo_csv] = df_final[f"{col_tipo_excel}_EXCEL"]
+
+        # Valida a coluna do responsável filtrando entradas inválidas, nulas ou vazias
         if col_responsavel in df_final.columns:
-            df_final = df_final[df_final[col_responsavel].astype(str).str.strip() != ""]
+            df_final[col_responsavel] = df_final[col_responsavel].astype(str).str.strip()
+            df_final = df_final[df_final[col_responsavel] != ""]
+            df_final = df_final[df_final[col_responsavel].str.upper() != "NAN"]
+            df_final = df_final[df_final[col_responsavel].str.upper() != "NONE"]
             df_final = df_final.dropna(subset=[col_responsavel])
         else:
             print("❌ Não foi possível encontrar a coluna RESPONSAVEL após a mesclagem.")
             return None
 
+        # Filtra os responsáveis selecionados na tela da interface de forma insensível a maiúsculas
         if selected_responsaveis:
-            print(f"✅ Gerando relatórios apenas para: {', '.join(selected_responsaveis)}")
-            df_final = df_final[df_final[col_responsavel].isin(selected_responsaveis)]
-        else:
-            print("🔄 Nenhum responsável selecionado. Gerando para todos.")
+            selected_responsaveis_clean = [str(r).strip().upper() for r in selected_responsaveis]
+            df_final = df_final[df_final[col_responsavel].str.upper().isin(selected_responsaveis_clean)]
 
         colunas_desejadas = [
             "RESPONSAVEL", "DISPLAY", "NRO DO EQUIPAMENTO",
@@ -537,7 +506,6 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         print(f"⚠️ Erro ao processar CSV utilizando a planilha de monitoramento: {e}")
         return None
 
-# --- SISTEMA DE FECHAMENTO (Dia 21 a 20 do próximo mês) ---
 def obter_caminho_planilha():
     hoje = datetime.datetime.now()
     dia_atual = hoje.day
@@ -555,56 +523,180 @@ def obter_caminho_planilha():
         mes_alvo = mes_atual
         ano_alvo = ano_atual
 
-    meses = {
-        1: "01 - Janeiro", 2: "02 - Fevereiro", 3: "03 - Março",
-        4: "04 - Abril", 5: "05 - Maio", 6: "06 - Junho",
-        7: "07 - Julho", 8: "08 - Agosto", 9: "09 - Setembro",
-        10: "10 - Outubro", 11: "11 - Novembro", 12: "12 - Dezembro"
-    }
+    # Formata o mês em 2 dígitos (ex: "01", "09", "12")
+    mes_str = f"{mes_alvo:02d}"
+    ano_str = str(ano_alvo)
 
-    numero_safra = 2.5 + (ano_alvo - 2025) * 0.1
-    safra = f"{numero_safra:.1f} - Safra {ano_alvo}"
-
-    possiveis_drives = ["A:", "Z:"]
+    # --- CAMINHO DE REDE (UNC) ---
+    possiveis_drives = [
+        r"\\192.168.14.150\Departamentos$", 
+        "I:",                                
+        "A:", 
+        "Z:", 
+        "G:"
+    ]
+    
     caminho_final = None
 
     for drive in possiveis_drives:
         base = fr"{drive}\ANG\Agricola\Controle\Computador de Bordo\Fechamento Prestação de Serviço (Linha Amarela)\Pago pelo Bordo"
-        caminho_teste = os.path.join(base, safra, meses[mes_alvo], "Monitoramento - Eqps.xlsx")
+        
+        if not os.path.exists(base):
+            continue
+
+        # 1. Procurar a pasta da Safra de forma dinâmica
+        pasta_safra = None
+        try:
+            for nome in os.listdir(base):
+                caminho_completo = os.path.join(base, nome)
+                if os.path.isdir(caminho_completo) and ano_str in nome and "Safra" in nome:
+                    pasta_safra = nome
+                    break
+        except Exception:
+            pass
+
+        if not pasta_safra:
+            continue
+            
+        caminho_safra = os.path.join(base, pasta_safra)
+
+        # 2. Procurar a pasta do Mês de forma dinâmica (pelo número do mês)
+        pasta_mes = None
+        try:
+            for nome in os.listdir(caminho_safra):
+                caminho_completo_mes = os.path.join(caminho_safra, nome)
+                if os.path.isdir(caminho_completo_mes) and nome.startswith(mes_str):
+                    pasta_mes = nome
+                    break
+        except Exception:
+            pass
+
+        if not pasta_mes:
+            continue
+
+        # 3. Tentar encontrar a planilha dentro da estrutura localizada
+        caminho_teste = os.path.join(caminho_safra, pasta_mes, "Monitoramento - Eqps.xlsx")
         if os.path.exists(caminho_teste):
             caminho_final = caminho_teste
             break
 
     if not caminho_final:
         raise FileNotFoundError(
-            f"❌ Não foi possível localizar a planilha de Equipamentos para a Safra '{safra}' no mês '{meses[mes_alvo]}'."
+            f"❌ Não foi possível localizar a planilha de Equipamentos para o Ano '{ano_alvo}' e Mês '{mes_str}'."
         )
 
     return caminho_final
 
+def ler_planilha_com_formulas(caminho_arquivo, nome_aba):
+    """Lê a planilha Excel usando openpyxl com data_only=True para extrair valores calculados das fórmulas."""
+    try:
+        wb = load_workbook(caminho_arquivo, data_only=True, read_only=True)
+        if nome_aba not in wb.sheetnames:
+            print(f"⚠️ Aba '{nome_aba}' não encontrada em {caminho_arquivo}")
+            wb.close()
+            return None
+        
+        ws = wb[nome_aba]
+        dados = []
+        cabecalhos = []
+        
+        # Extrai os cabeçalhos da primeira linha
+        for cell in ws[1]:
+            cabecalhos.append(cell.value)
+        
+        # Extrai os dados das linhas subsequentes
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            dados.append(row)
+        
+        wb.close()
+        
+        # Converte para DataFrame
+        if dados:
+            df = pd.DataFrame(dados, columns=cabecalhos)
+            return df
+        else:
+            return None
+    except Exception as e:
+        print(f"⚠️ Erro ao ler planilha com openpyxl: {e}")
+        return None
+
+def carregar_responsaveis_da_planilha():
+    """Lê dinamicamente a lista de responsáveis únicos diretamente do arquivo monitoramento Excel."""
+    global RESPONSAVEIS_OPCOES
+    try:
+        caminho_planilha = obter_caminho_planilha()
+        if not caminho_planilha or not os.path.exists(caminho_planilha):
+            print("⚠️ Planilha não localizada no momento. Usando lista padrão de responsáveis.")
+            return
+        
+        print(f"📖 Lendo responsáveis diretamente de: {caminho_planilha}")
+        # data_only=True lê apenas o valor final resultante das fórmulas
+        wb = load_workbook(caminho_planilha, data_only=True, read_only=True)
+        if "Cont. Maquinas" not in wb.sheetnames:
+            print("⚠️ Aba 'Cont. Maquinas' não encontrada. Usando lista de responsáveis de backup.")
+            wb.close()
+            return
+        
+        ws = wb["Cont. Maquinas"]
+        primeira_linha = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+        
+        # Limpeza e normalização dos cabeçalhos contra problemas de encoding/acentos
+        normalized_headers = []
+        for val in primeira_linha:
+            if val is None:
+                normalized_headers.append("")
+                continue
+            clean = str(val).strip().upper()
+            clean = clean.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+            clean = clean.replace('Â', 'A').replace('Ê', 'E').replace('Î', 'I').replace('Ô', 'O').replace('Û', 'U')
+            clean = clean.replace('Ã', 'A').replace('Õ', 'O')
+            clean = clean.replace('Ç', 'C')
+            normalized_headers.append(clean)
+            
+        if "RESPONSAVEL" not in normalized_headers:
+            print("⚠️ Coluna 'RESPONSAVEL' não foi detectada. Utilizando lista padrão de backup.")
+            wb.close()
+            return
+            
+        idx_resp = normalized_headers.index("RESPONSAVEL")
+        responsaveis_encontrados = set()
+        
+        # Iterar a partir da linha 2 para capturar os dados avaliados pelas fórmulas
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if idx_resp < len(row):
+                val = row[idx_resp]
+                if val:
+                    val_str = str(val).strip().upper()
+                    # Ignora lixo ou células nulas
+                    if val_str not in ["NAN", "NONE", "NULL", "", "0", "0.0"]:
+                        responsaveis_encontrados.add(val_str)
+                        
+        wb.close()
+        
+        if responsaveis_encontrados:
+            novos_nomes = sorted(list(responsaveis_encontrados))
+            RESPONSAVEIS_OPCOES = novos_nomes
+            print(f"✅ Responsáveis carregados dinamicamente com sucesso: {novos_nomes}")
+        else:
+            print("⚠️ Nenhum responsável válido encontrado no arquivo. Usando dados padrão.")
+    except Exception as e:
+        print(f"⚠️ Erro ao tentar ler responsáveis dinâmicos da planilha de rede: {e}. Revertendo para backup.")
+
 def atualizar_coleta_planilha(df_final):
-    """
-    Atualiza a coluna COLETA utilizando XLWINGS para simular uma ação de usuário no Excel.
-    Isso é FUNDAMENTAL para que as fórmulas PROCV (Display, Prestador, etc) não percam
-    seu cache de memória (bug conhecido do openpyxl ao usar 'wb.save()').
-    """
+    """Atualiza a coluna COLETA utilizando XLWINGS para simular uma ação de usuário no Excel."""
     try:
         caminho_planilha = obter_caminho_planilha()
         aba_alvo = "Cont. Maquinas"
 
         print("⏳ Atualizando Excel nativamente via xlwings (preservando o cache das Fórmulas)...")
-        app = xw.App(visible=False)  # Abre o Excel no background
-        
-        # --- PREVENÇÃO DE ERROS DE SALVAMENTO (TRAVAMENTOS E POPUPS DO EXCEL) ---
+        app = xw.App(visible=False)
         app.display_alerts = False 
-        
         wb = None
         
         try:
             wb = app.books.open(caminho_planilha)
             ws = wb.sheets[aba_alvo]
 
-            # Obter os cabeçalhos diretamente da primeira linha
             header_range = ws.range('A1').expand('right')
             cabecalhos = {str(cell.value).strip().upper(): cell.column for cell in header_range if cell.value}
 
@@ -618,26 +710,21 @@ def atualizar_coleta_planilha(df_final):
             equipamentos_contingencia = set(df_final["NRO DO EQUIPAMENTO"].astype(str).str.strip())
             equipamentos_coletados = set()
 
-            # Descobre a última linha com equipamento para otimizar a leitura
             last_row = ws.range((ws.cells.last_cell.row, col_equip)).end('up').row
             if last_row < 2: return
 
-            # Ler os valores em Bloco (Batch) para velocidade
             valores_equip = ws.range((2, col_equip), (last_row, col_equip)).value
             valores_coleta = ws.range((2, col_coleta), (last_row, col_coleta)).value
 
-            # Converte valores únicos em lista caso haja apenas 1 linha
             if not isinstance(valores_equip, list): valores_equip = [valores_equip]
             if not isinstance(valores_coleta, list): valores_coleta = [valores_coleta]
 
-            # 1. Identificar quais já estão marcados como DADOS COLETADOS
             for eq, col_val in zip(valores_equip, valores_coleta):
                 if col_val == "DADOS COLETADOS" and eq is not None:
                     eq_str = str(eq).strip()
                     if eq_str.endswith('.0'): eq_str = eq_str[:-2]
                     equipamentos_coletados.add(eq_str)
 
-            # 2. Escrever "COLETAR DADOS" para os novos que estão no df_final
             for i, (eq, col_val) in enumerate(zip(valores_equip, valores_coleta)):
                 if eq is None: continue
                 
@@ -660,7 +747,6 @@ def atualizar_coleta_planilha(df_final):
                     if col_val == "COLETAR DADOS":
                         cell_coleta.value = None
 
-            # --- SALVAMENTO EXPLÍCITO PASSANDO O CAMINHO PARA EVITAR BLOQUEIO DE REDE ---
             wb.save(caminho_planilha)
             print("✅ Atualização da coluna COLETA concluída de forma segura!")
         finally:
@@ -675,42 +761,25 @@ def atualizar_coleta_planilha(df_final):
     except Exception as e:
         print(f"⚠️ Erro grave ao atualizar a planilha via xlwings: {e}")
 
-def capturar_imagem_pdf_mupdf(caminho_pdf, output_dir, nome_imagem):
-    try:
-        pdf_documento = fitz.open(caminho_pdf)
-        pagina = pdf_documento[0]
-
-        matriz = fitz.Matrix(3, 3)
-        imagem = pagina.get_pixmap(matrix=matriz)
-
-        caminho_png = os.path.join(output_dir, f"{nome_imagem}.png")
-        imagem.save(caminho_png)
-        print(f"🖼️ Imagem do PDF salva como: {caminho_png}")
-
-        pdf_documento.close()
-    except Exception as e:
-        print(f"⚠️ Erro ao capturar imagem do PDF: {e}")
-
 def salvar_pdf_por_responsavel(df_final, output_dir):
     try:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
+        # Remove apenas arquivos PDF antigos da pasta de saída
         for arquivo in os.listdir(output_dir):
-            if arquivo.endswith(".pdf") or arquivo.endswith(".png"):
+            if arquivo.endswith(".pdf"):
                 os.remove(os.path.join(output_dir, arquivo))
 
         caminho_planilha = obter_caminho_planilha()
         aba_alvo = "Cont. Maquinas"
         
-        # Openpyxl pode ser usado aqui sem medo, pois read_only=True NÃO corrompe o arquivo
         wb = load_workbook(caminho_planilha, data_only=True, read_only=True)
         ws = wb[aba_alvo]
 
         colunas = {str(cell.value).strip().upper(): idx for idx, cell in enumerate(ws[1]) if cell.value}
         if "EQUIPAMENTO" not in colunas or "COLETA" not in colunas:
             print("⚠️ Colunas necessárias não encontradas na aba Cont. Maquinas.")
-            # IMPORTANTE: Liberar o arquivo mesmo se der erro para não bloquear o xlwings depois!
             wb.close()
             return
 
@@ -719,17 +788,23 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
         col_coleta = colunas["COLETA"]
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            equipamento = str(row[col_equipamento]).strip() if row[col_equipamento] else ""
-            coleta = str(row[col_coleta]).strip() if row[col_coleta] else ""
-            if coleta == "DADOS COLETADOS":
-                equipamentos_coletados.add(equipamento)
+            equipamento = str(row[col_equipamento]).strip() if row[col_equipamento] is not None else ""
+            if equipamento and equipamento != "None" and equipamento != "nan":
+                if equipamento.endswith(".0"):
+                    equipamento = equipamento[:-2]
+                coleta = str(row[col_coleta]).strip() if row[col_coleta] is not None else ""
+                if coleta == "DADOS COLETADOS":
+                    equipamentos_coletados.add(equipamento)
 
-        # --- CORREÇÃO DO ERRO DE SAVE (XLWINGS) ---
-        # Fecha e libera o arquivo da memória do openpyxl agora que já temos a lista de equipamentos.
-        # Sem isso, o Windows acha que o arquivo está em uso e impede a gravação na próxima função!
         wb.close() 
 
-        df_filtrado = df_final[~df_final["NRO DO EQUIPAMENTO"].astype(str).isin(equipamentos_coletados)]
+        # Filtra os dados de forma robusta comparando os códigos limpos das frotas
+        df_final["NRO DO EQUIPAMENTO_LIMPO"] = df_final["NRO DO EQUIPAMENTO"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+        df_filtrado = df_final[~df_final["NRO DO EQUIPAMENTO_LIMPO"].isin(equipamentos_coletados)]
+        
+        # Remove a coluna temporária
+        df_filtrado = df_filtrado.drop(columns=["NRO DO EQUIPAMENTO_LIMPO"])
+
         responsaveis_para_gerar = df_filtrado['RESPONSAVEL'].unique()
         data_hora_geracao = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
 
@@ -813,13 +888,10 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
             pdf.output(caminho_pdf)
 
             print(f"📄 PDF gerado com sucesso para {responsavel}: {caminho_pdf}")
-            capturar_imagem_pdf_mupdf(caminho_pdf, output_dir, f"Relatorio_{responsavel.replace(' ', '_')}")
     except Exception as e:
         print(f"⚠️ Erro ao gerar PDF: {e}")
 
-# --- Funções da Interface Gráfica (Tkinter) ---
 def alternar_visualizacao_senha():
-    """Alterna a visualização da senha na interface."""
     if entry_senha.cget('show') == '*':
         entry_senha.config(show='')
         botao_visualizar.config(text="Ocultar")
@@ -828,7 +900,6 @@ def alternar_visualizacao_senha():
         botao_visualizar.config(text="Mostrar")
 
 def atualizar_campos_credenciais(credenciais_path):
-    """Carrega as credenciais de um arquivo JSON."""
     try:
         with open(credenciais_path, "r", encoding='utf-8') as file:
             data = json.load(file)
@@ -839,7 +910,6 @@ def atualizar_campos_credenciais(credenciais_path):
         return False, "", ""
 
 def salvar_usuario(credenciais_path):
-    """Salva o usuário e a senha em um arquivo JSON."""
     usuario = entry_usuario.get()
     senha = entry_senha.get()
 
@@ -856,6 +926,17 @@ def salvar_usuario(credenciais_path):
             os.remove(credenciais_path)
             print("🔴 Arquivo de credenciais removido.")
 
+
+def selecionar_todos():
+    for var in responsaveis_vars.values():
+        var.set(True)
+
+
+def limpar_selecao():
+    for var in responsaveis_vars.values():
+        var.set(False)
+
+
 def cancelar_execucao():
     global execucao_ativa
     execucao_ativa = False
@@ -863,7 +944,6 @@ def cancelar_execucao():
     atualizar_progresso("Execução cancelada.", step=0, total_steps=1)
 
 def atualizar_progresso(status_texto, step, total_steps):
-    """Atualiza o rótulo de status e a barra de progresso de forma segura para threads."""
     if root and status_label and progress_bar:
         root.after(0, _atualizar_progresso_thread_safe, status_texto, step, total_steps)
 
@@ -875,64 +955,93 @@ def _atualizar_progresso_thread_safe(status_texto, step, total_steps):
     root.update_idletasks()
 
 def criar_interface():
-    global entry_usuario, entry_senha, var_salvar_usuario, botao_visualizar, driver, responsaveis_vars, entry_intervalo, var_intervalo_ativado, status_label, progress_bar, root
+    global entry_usuario, entry_senha, var_salvar_usuario, var_headless, botao_visualizar, driver, responsaveis_vars, entry_intervalo, var_intervalo_ativado, status_label, progress_bar, root
 
     credenciais_path = os.path.join(script_dir, "credenciais.json")
 
+    # Tenta carregar os responsáveis reais da planilha de rede dinamicamente na inicialização
+    carregar_responsaveis_da_planilha()
+
     PALETTE = {
         "primary": "#0066AC",
-        "secondary": "#43948C",
-        "success": "#6BBE3B",
-        "danger": "#B90000",
-        "background": "#FFFFFF",
-        "text": "#000000",
+        "secondary": "#5a6268",
+        "success": "#28a745",
+        "danger": "#dc3545",
+        "background": "#F8F9FA",
+        "text": "#212529",
     }
 
     root = ttk.Window(themename="yeti")
-    root.title(f"HXG - Auto  v{VERSAO}")
+    root.title(f"Sistema Automatizado de Contingência HXG — v{VERSAO}")
+    
+    # Centralização e dimensionamento dinâmico e inteligente da janela
+    root.update_idletasks()
+    largura = 928
+    altura = 670
+    largura_tela = root.winfo_screenwidth()
+    altura_tela = root.winfo_screenheight()
+    pos_x = (largura_tela // 2) - (largura // 2)
+    pos_y = (altura_tela // 2) - (altura // 2)
+    root.geometry(f"{largura}x{altura}+{pos_x}+{pos_y}")
+    root.resizable(False, False)
 
     style = ttk.Style()
-    style.configure("TLabel", font=("Helvetica", 11), background=PALETTE["background"], foreground=PALETTE["text"])
+    style.configure("TLabel", font=("Helvetica", 10), background=PALETTE["background"], foreground=PALETTE["text"])
     style.configure("TFrame", background=PALETTE["background"])
-    style.configure("TLabelframe", background=PALETTE["background"], foreground=PALETTE["text"])
-    style.configure("TLabelframe.Label", background=PALETTE["background"], foreground=PALETTE["text"])
-    style.configure("TEntry", fieldbackground="white", foreground=PALETTE["text"])
+    style.configure("TLabelframe", background=PALETTE["background"], font=("Helvetica", 11, "bold"))
+    style.configure("TLabelframe.Label", background=PALETTE["background"], foreground=PALETTE["primary"])
+    style.configure("TEntry", fieldbackground="white", font=("Helvetica", 10))
 
-    style.configure("success.TButton", background=PALETTE["success"], foreground="white",
-                    font=("Helvetica", 11, "bold"))
+    style.configure("success.TButton", background=PALETTE["success"], foreground="white", font=("Helvetica", 11, "bold"))
     style.configure("danger.TButton", background=PALETTE["danger"], foreground="white", font=("Helvetica", 11, "bold"))
-    style.configure("info.TButton", background=PALETTE["primary"], foreground="white", font=("Helvetica", 11, "bold"))
-    style.configure("secondary.TButton", background=PALETTE["secondary"], foreground="white",
-                    font=("Helvetica", 11, "bold"))
-    style.map("TButton", background=[("active", PALETTE["primary"])])
-
-    style.configure("Roundtoggle.TCheckbutton", background=PALETTE["background"], foreground=PALETTE["text"])
-    style.configure("info-round-toggle.TCheckbutton", background=PALETTE["background"], foreground=PALETTE["text"])
+    style.configure("info.TButton", background=PALETTE["primary"], foreground="white", font=("Helvetica", 10, "bold"))
+    style.configure("secondary.TButton", background=PALETTE["secondary"], foreground="white", font=("Helvetica", 10, "bold"))
+    
+    style.configure("Roundtoggle.TCheckbutton", background=PALETTE["background"], font=("Helvetica", 10))
+    style.configure("info-round-toggle.TCheckbutton", background=PALETTE["background"], font=("Helvetica", 10))
+    style.configure("success-round-toggle.TCheckbutton", background=PALETTE["background"], font=("Helvetica", 10))
 
     responsaveis_vars = {nome: tk.BooleanVar() for nome in RESPONSAVEIS_OPCOES}
 
-    main_frame = ttk.Frame(root, padding=20)
+    # Frame principal de preenchimento
+    main_frame = ttk.Frame(root, padding=25)
     main_frame.pack(fill="both", expand=True)
 
-    ttk.Label(main_frame, text="AUTO. CONTIGÊNCIA - HXG", font=("Helvetica", 20, "bold"),
-              foreground=PALETTE["primary"]).pack(pady=(0, 20))
+    # Banner Superior (Título Moderno)
+    banner_frame = ttk.Frame(main_frame)
+    banner_frame.pack(fill="x", pady=(0, 15))
+    
+    title_label = ttk.Label(banner_frame, text="AUTOMAÇÃO DE CONTINGÊNCIA — HXG", font=("Helvetica", 18, "bold"), foreground=PALETTE["primary"])
+    title_label.pack(side="left")
+    
+    version_label = ttk.Label(banner_frame, text=f"Versão {VERSAO}", font=("Helvetica", 10, "italic"), foreground="gray")
+    version_label.pack(side="right", anchor="s", pady=5)
 
-    cred_frame = ttk.Labelframe(main_frame, text="Credenciais", padding=15)
-    cred_frame.pack(fill="x", pady=10)
+    # --- Divisor Central em Colunas (Esquerda: Configurações, Direita: Responsáveis) ---
+    split_container = ttk.Frame(main_frame)
+    split_container.pack(fill="both", expand=True, pady=10)
 
-    ttk.Label(cred_frame, text="Usuário:").pack(anchor="w", pady=(0, 5))
-    entry_usuario = ttk.Entry(cred_frame, width=40)
-    entry_usuario.pack(fill="x")
+    # Coluna Esquerda
+    col_esquerda = ttk.Frame(split_container)
+    col_esquerda.pack(side="left", fill="both", expand=True, padx=(0, 15))
 
-    ttk.Label(cred_frame, text="Senha:").pack(anchor="w", pady=(10, 5))
+    # Labelframe de Credenciais
+    cred_frame = ttk.Labelframe(col_esquerda, text="  🔑 Credenciais de Acesso  ", padding=15)
+    cred_frame.pack(fill="x", pady=(0, 15))
+
+    ttk.Label(cred_frame, text="Usuário / Matrícula:").pack(anchor="w", pady=(0, 5))
+    entry_usuario = ttk.Entry(cred_frame)
+    entry_usuario.pack(fill="x", pady=(0, 10))
+
+    ttk.Label(cred_frame, text="Senha de Acesso:").pack(anchor="w", pady=(0, 5))
     frame_senha = ttk.Frame(cred_frame)
-    frame_senha.pack(fill="x")
+    frame_senha.pack(fill="x", pady=(0, 10))
 
     entry_senha = ttk.Entry(frame_senha, show="*")
     entry_senha.pack(side="left", fill="x", expand=True)
 
-    botao_visualizar = ttk.Button(frame_senha, text="Mostrar", command=alternar_visualizacao_senha)
-    botao_visualizar.pack(side="left", padx=(5, 0))
+    botao_visualizar = ttk.Button(frame_senha, text="Mostrar", command=alternar_visualizacao_senha, bootstyle="secondary-outline", width=8)
+    botao_visualizar.pack(side="left", padx=(8, 0))
 
     var_salvar_usuario = tk.BooleanVar()
     credenciais_existentes, usuario_carregado, senha_carregada = atualizar_campos_credenciais(credenciais_path)
@@ -942,62 +1051,90 @@ def criar_interface():
         entry_usuario.insert(0, usuario_carregado)
         entry_senha.insert(0, senha_carregada)
 
-    ttk.Checkbutton(cred_frame, text="Salvar usuário e senha", variable=var_salvar_usuario,
-                    bootstyle="round-toggle").pack(anchor="w", pady=(10, 0))
+    ttk.Checkbutton(cred_frame, text="Lembrar meu usuário e senha", variable=var_salvar_usuario, bootstyle="round-toggle").pack(anchor="w", pady=(5, 0))
 
-    intervalo_frame = ttk.Frame(main_frame)
-    intervalo_frame.pack(fill="x", pady=(10, 5))
+    # Labelframe de Parâmetros e Driver
+    param_frame = ttk.Labelframe(col_esquerda, text="  ⚙️ Parâmetros do Navegador e Ciclo  ", padding=15)
+    param_frame.pack(fill="both", expand=True)
 
-    ttk.Label(intervalo_frame, text="Executar a cada (minutos):").pack(side="left", padx=(0, 5))
-    entry_intervalo = ttk.Entry(intervalo_frame, width=10)
+    # --- TOGGLE HEADLESS (Padrao Ativado/Invisível) ---
+    var_headless = tk.BooleanVar(value=True)
+    chk_headless = ttk.Checkbutton(
+        param_frame, 
+        text="Executar em segundo plano (Oculto - Recomendado)", 
+        variable=var_headless, 
+        bootstyle="success-round-toggle"
+    )
+    chk_headless.pack(anchor="w", pady=(0, 15))
+
+    # Configuração de Ciclo / Agendamento
+    sched_container = ttk.Frame(param_frame)
+    sched_container.pack(fill="x", pady=(0, 10))
+    
+    ttk.Label(sched_container, text="Intervalo de varredura:").pack(side="left", padx=(0, 5))
+    entry_intervalo = ttk.Entry(sched_container, width=8)
     entry_intervalo.insert(0, "60")
-    entry_intervalo.pack(side="left", padx=(0, 10))
+    entry_intervalo.pack(side="left", padx=(0, 5))
+    ttk.Label(sched_container, text="minutos").pack(side="left")
 
     var_intervalo_ativado = tk.BooleanVar(value=False)
-    ttk.Checkbutton(intervalo_frame, text="Ativar agendamento", variable=var_intervalo_ativado,
-                    bootstyle="round-toggle").pack(side="left")
+    chk_intervalo = ttk.Checkbutton(
+        param_frame, 
+        text="Ativar Agendamento Automático de Contingência", 
+        variable=var_intervalo_ativado,
+        bootstyle="info-round-toggle"
+    )
+    chk_intervalo.pack(anchor="w", pady=(5, 0))
 
-    resp_frame = ttk.Labelframe(main_frame, text="Gerar PDF para:", padding=15)
-    resp_frame.pack(fill="both", expand=True, pady=10)
 
-    def selecionar_todos():
-        for var in responsaveis_vars.values():
-            var.set(True)
+    # Coluna Direita (Responsáveis)
+    col_direita = ttk.Frame(split_container)
+    col_direita.pack(side="right", fill="both", expand=True, padx=(15, 0))
 
-    def limpar_selecao():
-        for var in responsaveis_vars.values():
-            var.set(False)
+    resp_frame = ttk.Labelframe(col_direita, text="  👤 Emitir Relatório para Responsáveis  ", padding=15)
+    resp_frame.pack(fill="both", expand=True)
 
-    btn_frame = ttk.Frame(resp_frame)
-    btn_frame.pack(fill="x", pady=(0, 5))
-    ttk.Button(btn_frame, text="Selecionar Todos", command=selecionar_todos, bootstyle="info").pack(side="left",
-                                                                                                  fill="x",
-                                                                                                  expand=True,
-                                                                                                  padx=(0, 5))
-    ttk.Button(btn_frame, text="Limpar Seleção", command=limpar_selecao, bootstyle="secondary").pack(side="left",
-                                                                                                    fill="x",
-                                                                                                    expand=True,
-                                                                                                    padx=(5, 0))
+    # Botões de controle de seleção em linha
+    ctrl_sel_frame = ttk.Frame(resp_frame)
+    ctrl_sel_frame.pack(fill="x", pady=(0, 15))
+    
+    btn_sel_todos = ttk.Button(ctrl_sel_frame, text="Selecionar Todos", command=selecionar_todos, bootstyle="info", width=18)
+    btn_sel_todos.pack(side="left", fill="x", expand=True, padx=(0, 5))
+    
+    btn_limpar_todos = ttk.Button(ctrl_sel_frame, text="Limpar Seleção", command=limpar_selecao, bootstyle="secondary", width=18)
+    btn_limpar_todos.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-    for nome, var in responsaveis_vars.items():
-        ttk.Checkbutton(resp_frame, text=nome, variable=var, bootstyle="info-round-toggle").pack(anchor="w", pady=2)
+    # Grid de 2 colunas para exibição otimizada, permitindo que novos responsáveis caibam elegantemente sem transbordar a interface
+    grid_responsáveis = ttk.Frame(resp_frame)
+    grid_responsáveis.pack(fill="both", expand=True)
+    grid_responsáveis.columnconfigure(0, weight=1)
+    grid_responsáveis.columnconfigure(1, weight=1)
 
-    status_label = ttk.Label(main_frame, text="Aguardando...", font=("Helvetica", 10), foreground="gray")
-    status_label.pack(pady=(10, 5))
+    for indice, (nome, variavel) in enumerate(responsaveis_vars.items()):
+        linha = indice // 2
+        coluna = indice % 2
+        chk_resp = ttk.Checkbutton(grid_responsáveis, text=nome, variable=variavel, bootstyle="info-round-toggle")
+        chk_resp.grid(row=linha, column=coluna, sticky="w", padx=10, pady=6)
 
-    progress_bar = ttk.Progressbar(main_frame, mode="determinate", bootstyle="info")
-    progress_bar.pack(fill="x", pady=(0, 10))
+    # --- Painel Inferior de Execução (Barra de Progresso e Botões de Ação) ---
+    bottom_frame = ttk.Frame(main_frame)
+    bottom_frame.pack(fill="x", pady=(15, 0))
 
-    action_frame = ttk.Frame(main_frame)
-    action_frame.pack(fill="x", pady=10)
+    status_label = ttk.Label(bottom_frame, text="Aguardando comando do usuário...", font=("Helvetica", 10, "italic"), foreground="gray")
+    status_label.pack(anchor="w", pady=(0, 5))
 
-    ttk.Button(action_frame, text="Executar", command=lambda: executar_script(), bootstyle="success").pack(side="left",
-                                                                                                           fill="x",
-                                                                                                           expand=True,
-                                                                                                           padx=(0, 5))
-    ttk.Button(action_frame, text="Pausar", command=cancelar_execucao, bootstyle="danger").pack(side="left", fill="x",
-                                                                                               expand=True,
-                                                                                               padx=(5, 0))
+    progress_bar = ttk.Progressbar(bottom_frame, mode="determinate", bootstyle="info")
+    progress_bar.pack(fill="x", pady=(0, 15))
+
+    # Botões de Execução (Iniciar e Pausar) em destaque
+    action_buttons_frame = ttk.Frame(bottom_frame)
+    action_buttons_frame.pack(fill="x")
+
+    btn_executar = ttk.Button(action_buttons_frame, text="  Iniciar Automação 🚀", command=lambda: executar_script(), bootstyle="success")
+    btn_executar.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+    btn_pausar = ttk.Button(action_buttons_frame, text="  Pausar Execução ⏸️", command=cancelar_execucao, bootstyle="danger")
+    btn_pausar.pack(side="right", fill="x", expand=True, padx=(8, 0))
 
     root.bind('<Return>', lambda event: executar_script())
 
@@ -1029,10 +1166,13 @@ def executar_script():
     credenciais_path = os.path.join(script_dir, "credenciais.json")
     salvar_usuario(credenciais_path)
 
-    atualizar_progresso("Iniciando a automação...", step=0, total_steps=6)
-    threading.Thread(target=executar_procedimento, args=(usuario, senha), daemon=True).start()
+    # Lê o estado da variável headless da thread principal de forma segura
+    headless_selecionado = var_headless.get()
 
-def executar_procedimento(usuario, senha):
+    atualizar_progresso("Iniciando a automação...", step=0, total_steps=6)
+    threading.Thread(target=executar_procedimento, args=(usuario, senha, headless_selecionado), daemon=True).start()
+
+def executar_procedimento(usuario, senha, is_headless):
     global driver, execucao_ativa, responsaveis_vars
     execucao_ativa = True
 
@@ -1046,8 +1186,7 @@ def executar_procedimento(usuario, senha):
         try:
             intervalo_minutos = int(entry_intervalo.get())
             if intervalo_minutos <= 0:
-                print(
-                    f"⚠️ Intervalo inválido ({intervalo_minutos}). Usando o original: {last_valid_interval} min.")
+                print(f"⚠️ Intervalo inválido ({intervalo_minutos}). Usando o original: {last_valid_interval} min.")
                 intervalo_minutos = last_valid_interval
             else:
                 last_valid_interval = intervalo_minutos
@@ -1057,8 +1196,7 @@ def executar_procedimento(usuario, senha):
 
         print(f"\n--- Iniciando novo ciclo ---")
         print(f"Responsáveis selecionados para este ciclo: {', '.join(selected_responsaveis) or 'Todos'}")
-        print(
-            f"Intervalo configurado: {intervalo_minutos} minutos. Agendamento Ativado: {'Sim' if intervalo_ativado else 'Não'}")
+        print(f"Intervalo configurado: {intervalo_minutos} minutos. Agendamento Ativado: {'Sim' if intervalo_ativado else 'Não'}")
 
         driver = None
         df_final = None
@@ -1081,7 +1219,7 @@ def executar_procedimento(usuario, senha):
             url = 'https://access.hxgnagron.com/?redirect=http:%2F%2Fcontrolroom.hxgnagron.com%2F#/'
 
             atualizar_progresso("Iniciando driver...", step=1, total_steps=TOTAL_STEPS)
-            driver = iniciar_driver(headless=True)
+            driver = iniciar_driver(headless=is_headless)
 
             if not execucao_ativa: break
 
@@ -1098,26 +1236,54 @@ def executar_procedimento(usuario, senha):
             atualizar_progresso("Aguardando download e processando...", step=4, total_steps=TOTAL_STEPS)
             df_final = processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis)
 
-            if df_final is not None:
+            if df_final is not None and not df_final.empty:
                 if not execucao_ativa: break
                 atualizar_progresso("Gerando PDFs...", step=5, total_steps=TOTAL_STEPS)
                 salvar_pdf_por_responsavel(df_final, pdf_output_dir)
 
                 if not execucao_ativa: break
-                atualizar_progresso("Atualizando planilha de controle...", step=6,
-                                    total_steps=TOTAL_STEPS)
+                atualizar_progresso("Atualizando planilha de controle...", step=6, total_steps=TOTAL_STEPS)
                 atualizar_coleta_planilha(df_final)
 
-                atualizar_progresso("Procedimento concluído com sucesso!", step=6,
-                                    total_steps=TOTAL_STEPS)
+                atualizar_progresso("Procedimento concluído com sucesso!", step=6, total_steps=TOTAL_STEPS)
             else:
-                atualizar_progresso("Processamento de dados falhou.", step=0, total_steps=1)
+                atualizar_progresso("Sem novos dados de contingência para gerar relatórios.", step=0, total_steps=1)
 
         except Exception as e:
+            # --- GERADOR DE LOG DE ERRO ---
+            import traceback
+            error_details = traceback.format_exc()
             error_message = f"❌ Erro fatal na execução: {type(e).__name__}: {str(e)[:100]}..."
+            
             print(error_message)
-            logger.error(f"❌ Erro fatal na execução do procedimento: {e}")
+            logger.error(f"❌ Erro fatal na execução do procedimento: {e}\n{error_details}")
             atualizar_progresso(error_message, step=0, total_steps=1)
+            
+            try:
+                user_profile = os.path.expanduser("~")
+                desktop_paths = [
+                    os.path.join(user_profile, "Desktop"),
+                    os.path.join(user_profile, "Área de Trabalho"),
+                    os.path.join(user_profile, "OneDrive", "Desktop"),
+                    os.path.join(user_profile, "OneDrive", "Área de Trabalho")
+                ]
+                
+                desktop = user_profile 
+                for dp in desktop_paths:
+                    if os.path.exists(dp):
+                        desktop = dp
+                        break
+                        
+                caminho_erro = os.path.join(desktop, "erro_hxg_debug.txt")
+                with open(caminho_erro, "w", encoding="utf-8") as f:
+                    f.write(f"Data/Hora: {datetime.datetime.now()}\n")
+                    f.write(f"Versão: {VERSAO}\n\n")
+                    f.write(f"Erro:\n{str(e)}\n\n")
+                    f.write(f"Traceback Técnico:\n{error_details}")
+                print(f"📄 Arquivo de log de erro salvo para análise em: {caminho_erro}")
+            except Exception as log_e:
+                print(f"⚠️ Não foi possível salvar o arquivo de log: {log_e}")
+                
         finally:
             if driver:
                 try:
@@ -1135,7 +1301,6 @@ def executar_procedimento(usuario, senha):
 
             for segundos_restantes in range(tempo_total_espera, 0, -1):
                 if not execucao_ativa: break
-
                 minutos, segundos = divmod(segundos_restantes, 60)
                 texto_tempo = f"Próxima execução em {minutos:02d}:{segundos:02d}"
                 atualizar_progresso(texto_tempo, step=6, total_steps=TOTAL_STEPS)

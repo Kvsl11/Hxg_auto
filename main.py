@@ -150,7 +150,7 @@ def verificar_seguranca():
     except Exception as e:
         logger.error(f"❌ Erro na rotina de segurança: {e}")
 
-VERSAO = "3.4.2"
+VERSAO = "3.4.5"
 
 warnings.filterwarnings(
     "ignore",
@@ -165,6 +165,7 @@ status_label = None
 progress_bar = None
 root = None
 
+# Lista padrão que servirá como backup caso a rede caia ou o arquivo Excel esteja inacessível
 RESPONSAVEIS_OPCOES = [
     "JUAN CARLOS", "ROSANI ALDA", "FERNANDO BREGUEDO", "FLAVIO BREGUEDO",
     "EDUARDO APARECIDO", "LEANDRO RENE", "EDUARDO NUNES", "LEANDRO SEBOLD",
@@ -404,15 +405,23 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
                 if 'wb' in locals() and wb: wb.close()
                 if 'app' in locals() and app: app.quit()
         except Exception as ex:
-            print(f"⚠️ Aviso: Não foi possível usar o motor nativo ({ex}). Tentando via pandas padrão...")
+            print(f"⚠️ Aviso: Não foi possível usar o motor nativo ({ex}). Tentando via openpyxl com data_only...")
             
         if df_responsaveis is None or df_responsaveis.empty:
+            df_responsaveis = ler_planilha_com_formulas(caminho_base_monitoramento, "Cont. Maquinas")
+            
+        if df_responsaveis is None or df_responsaveis.empty:
+            print("⚠️ openpyxl falhou. Tentando via pandas padrão...")
             df_responsaveis = pd.read_excel(caminho_base_monitoramento, sheet_name="Cont. Maquinas")
         
+        # Tratamento rigoroso de acentuações e caracteres especiais nos cabeçalhos da planilha
         normalized_cols = {}
         for col in df_responsaveis.columns:
             clean_col = str(col).strip().upper()
             clean_col = clean_col.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+            clean_col = clean_col.replace('Â', 'A').replace('Ê', 'E').replace('Î', 'I').replace('Ô', 'O').replace('Û', 'U')
+            clean_col = clean_col.replace('Ã', 'A').replace('Õ', 'O')
+            clean_col = clean_col.replace('Ç', 'C')
             normalized_cols[col] = clean_col
         df_responsaveis = df_responsaveis.rename(columns=normalized_cols)
 
@@ -421,6 +430,8 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
         col_responsavel = "RESPONSAVEL"
         col_display = "DISPLAY"
         col_prestador = "PRESTADOR"
+        col_tipo_excel = "TIPO"
+        col_tipo_csv = "TIPO DO EQUIPAMENTO"
 
         if col_equipamento_base not in df_responsaveis.columns:
             print(f"⚠️ A coluna '{col_equipamento_base}' não foi encontrada na aba 'Cont. Maquinas'!")
@@ -428,16 +439,21 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
 
         df_responsaveis = df_responsaveis.rename(columns={col_equipamento_base: col_equipamento_csv})
 
+        # Limpeza e remoção de floats .0 para um cruzamento seguro dos códigos das máquinas
         df_antigos[col_equipamento_csv] = df_antigos[col_equipamento_csv].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
         df_responsaveis[col_equipamento_csv] = df_responsaveis[col_equipamento_csv].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
 
-        for col in [col_responsavel, col_display, col_prestador]:
+        # Remove linhas que não possuam número de equipamento associado
+        df_responsaveis = df_responsaveis.dropna(subset=[col_equipamento_csv])
+        df_responsaveis = df_responsaveis[df_responsaveis[col_equipamento_csv].astype(str).str.strip() != ""]
+
+        for col in [col_responsavel, col_display, col_prestador, col_tipo_excel]:
             if col in df_responsaveis.columns:
                 df_responsaveis[col] = df_responsaveis[col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
                 df_responsaveis[col] = df_responsaveis[col].replace({'nan': '', 'None': '', '<NA>': ''})
 
         colunas_necessarias = [col_equipamento_csv]
-        for c in [col_responsavel, col_display, col_prestador]:
+        for c in [col_responsavel, col_display, col_prestador, col_tipo_excel]:
             if c in df_responsaveis.columns:
                 colunas_necessarias.append(c)
 
@@ -448,19 +464,34 @@ def processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis):
             suffixes=('_CSV', '_EXCEL')
         )
         
+        # Atribui os dados provenientes da planilha (Excel) que contém a prioridade dos responsáveis
         for c in [col_responsavel, col_display, col_prestador]:
             if f"{c}_EXCEL" in df_final.columns:
                 df_final[c] = df_final[f"{c}_EXCEL"]
+            elif f"{c}_CSV" in df_final.columns:
+                df_final[c] = df_final[f"{c}_CSV"]
 
+        # Faz o mapeamento da coluna "TIPO" da planilha para "TIPO DO EQUIPAMENTO" do relatório gerado
+        if col_tipo_excel in df_final.columns:
+            df_final[col_tipo_csv] = df_final[col_tipo_excel]
+        elif f"{col_tipo_excel}_EXCEL" in df_final.columns:
+            df_final[col_tipo_csv] = df_final[f"{col_tipo_excel}_EXCEL"]
+
+        # Valida a coluna do responsável filtrando entradas inválidas, nulas ou vazias
         if col_responsavel in df_final.columns:
-            df_final = df_final[df_final[col_responsavel].astype(str).str.strip() != ""]
+            df_final[col_responsavel] = df_final[col_responsavel].astype(str).str.strip()
+            df_final = df_final[df_final[col_responsavel] != ""]
+            df_final = df_final[df_final[col_responsavel].str.upper() != "NAN"]
+            df_final = df_final[df_final[col_responsavel].str.upper() != "NONE"]
             df_final = df_final.dropna(subset=[col_responsavel])
         else:
             print("❌ Não foi possível encontrar a coluna RESPONSAVEL após a mesclagem.")
             return None
 
+        # Filtra os responsáveis selecionados na tela da interface de forma insensível a maiúsculas
         if selected_responsaveis:
-            df_final = df_final[df_final[col_responsavel].isin(selected_responsaveis)]
+            selected_responsaveis_clean = [str(r).strip().upper() for r in selected_responsaveis]
+            df_final = df_final[df_final[col_responsavel].str.upper().isin(selected_responsaveis_clean)]
 
         colunas_desejadas = [
             "RESPONSAVEL", "DISPLAY", "NRO DO EQUIPAMENTO",
@@ -499,7 +530,7 @@ def obter_caminho_planilha():
     # --- CAMINHO DE REDE (UNC) ---
     possiveis_drives = [
         r"\\192.168.14.150\Departamentos$", 
-        "I:",                                 
+        "I:",                                
         "A:", 
         "Z:", 
         "G:"
@@ -555,6 +586,101 @@ def obter_caminho_planilha():
         )
 
     return caminho_final
+
+def ler_planilha_com_formulas(caminho_arquivo, nome_aba):
+    """Lê a planilha Excel usando openpyxl com data_only=True para extrair valores calculados das fórmulas."""
+    try:
+        wb = load_workbook(caminho_arquivo, data_only=True, read_only=True)
+        if nome_aba not in wb.sheetnames:
+            print(f"⚠️ Aba '{nome_aba}' não encontrada em {caminho_arquivo}")
+            wb.close()
+            return None
+        
+        ws = wb[nome_aba]
+        dados = []
+        cabecalhos = []
+        
+        # Extrai os cabeçalhos da primeira linha
+        for cell in ws[1]:
+            cabecalhos.append(cell.value)
+        
+        # Extrai os dados das linhas subsequentes
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            dados.append(row)
+        
+        wb.close()
+        
+        # Converte para DataFrame
+        if dados:
+            df = pd.DataFrame(dados, columns=cabecalhos)
+            return df
+        else:
+            return None
+    except Exception as e:
+        print(f"⚠️ Erro ao ler planilha com openpyxl: {e}")
+        return None
+
+def carregar_responsaveis_da_planilha():
+    """Lê dinamicamente a lista de responsáveis únicos diretamente do arquivo monitoramento Excel."""
+    global RESPONSAVEIS_OPCOES
+    try:
+        caminho_planilha = obter_caminho_planilha()
+        if not caminho_planilha or not os.path.exists(caminho_planilha):
+            print("⚠️ Planilha não localizada no momento. Usando lista padrão de responsáveis.")
+            return
+        
+        print(f"📖 Lendo responsáveis diretamente de: {caminho_planilha}")
+        # data_only=True lê apenas o valor final resultante das fórmulas
+        wb = load_workbook(caminho_planilha, data_only=True, read_only=True)
+        if "Cont. Maquinas" not in wb.sheetnames:
+            print("⚠️ Aba 'Cont. Maquinas' não encontrada. Usando lista de responsáveis de backup.")
+            wb.close()
+            return
+        
+        ws = wb["Cont. Maquinas"]
+        primeira_linha = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+        
+        # Limpeza e normalização dos cabeçalhos contra problemas de encoding/acentos
+        normalized_headers = []
+        for val in primeira_linha:
+            if val is None:
+                normalized_headers.append("")
+                continue
+            clean = str(val).strip().upper()
+            clean = clean.replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+            clean = clean.replace('Â', 'A').replace('Ê', 'E').replace('Î', 'I').replace('Ô', 'O').replace('Û', 'U')
+            clean = clean.replace('Ã', 'A').replace('Õ', 'O')
+            clean = clean.replace('Ç', 'C')
+            normalized_headers.append(clean)
+            
+        if "RESPONSAVEL" not in normalized_headers:
+            print("⚠️ Coluna 'RESPONSAVEL' não foi detectada. Utilizando lista padrão de backup.")
+            wb.close()
+            return
+            
+        idx_resp = normalized_headers.index("RESPONSAVEL")
+        responsaveis_encontrados = set()
+        
+        # Iterar a partir da linha 2 para capturar os dados avaliados pelas fórmulas
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if idx_resp < len(row):
+                val = row[idx_resp]
+                if val:
+                    val_str = str(val).strip().upper()
+                    # Ignora lixo ou células nulas
+                    if val_str not in ["NAN", "NONE", "NULL", "", "0", "0.0"]:
+                        responsaveis_encontrados.add(val_str)
+                        
+        wb.close()
+        
+        if responsaveis_encontrados:
+            novos_nomes = sorted(list(responsaveis_encontrados))
+            RESPONSAVEIS_OPCOES = novos_nomes
+            print(f"✅ Responsáveis carregados dinamicamente com sucesso: {novos_nomes}")
+        else:
+            print("⚠️ Nenhum responsável válido encontrado no arquivo. Usando dados padrão.")
+    except Exception as e:
+        print(f"⚠️ Erro ao tentar ler responsáveis dinâmicos da planilha de rede: {e}. Revertendo para backup.")
 
 def atualizar_coleta_planilha(df_final):
     """Atualiza a coluna COLETA utilizando XLWINGS para simular uma ação de usuário no Excel."""
@@ -662,14 +788,23 @@ def salvar_pdf_por_responsavel(df_final, output_dir):
         col_coleta = colunas["COLETA"]
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            equipamento = str(row[col_equipamento]).strip() if row[col_equipamento] else ""
-            coleta = str(row[col_coleta]).strip() if row[col_coleta] else ""
-            if coleta == "DADOS COLETADOS":
-                equipamentos_coletados.add(equipamento)
+            equipamento = str(row[col_equipamento]).strip() if row[col_equipamento] is not None else ""
+            if equipamento and equipamento != "None" and equipamento != "nan":
+                if equipamento.endswith(".0"):
+                    equipamento = equipamento[:-2]
+                coleta = str(row[col_coleta]).strip() if row[col_coleta] is not None else ""
+                if coleta == "DADOS COLETADOS":
+                    equipamentos_coletados.add(equipamento)
 
         wb.close() 
 
-        df_filtrado = df_final[~df_final["NRO DO EQUIPAMENTO"].astype(str).isin(equipamentos_coletados)]
+        # Filtra os dados de forma robusta comparando os códigos limpos das frotas
+        df_final["NRO DO EQUIPAMENTO_LIMPO"] = df_final["NRO DO EQUIPAMENTO"].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+        df_filtrado = df_final[~df_final["NRO DO EQUIPAMENTO_LIMPO"].isin(equipamentos_coletados)]
+        
+        # Remove a coluna temporária
+        df_filtrado = df_filtrado.drop(columns=["NRO DO EQUIPAMENTO_LIMPO"])
+
         responsaveis_para_gerar = df_filtrado['RESPONSAVEL'].unique()
         data_hora_geracao = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
 
@@ -824,6 +959,9 @@ def criar_interface():
 
     credenciais_path = os.path.join(script_dir, "credenciais.json")
 
+    # Tenta carregar os responsáveis reais da planilha de rede dinamicamente na inicialização
+    carregar_responsaveis_da_planilha()
+
     PALETTE = {
         "primary": "#0066AC",
         "secondary": "#5a6268",
@@ -838,7 +976,7 @@ def criar_interface():
     
     # Centralização e dimensionamento dinâmico e inteligente da janela
     root.update_idletasks()
-    largura = 920
+    largura = 928
     altura = 670
     largura_tela = root.winfo_screenwidth()
     altura_tela = root.winfo_screenheight()
@@ -919,7 +1057,7 @@ def criar_interface():
     param_frame = ttk.Labelframe(col_esquerda, text="  ⚙️ Parâmetros do Navegador e Ciclo  ", padding=15)
     param_frame.pack(fill="both", expand=True)
 
-    # --- NOVO REQUISITO: TOGGLE HEADLESS (Padrao Ativado/Invisível) ---
+    # --- TOGGLE HEADLESS (Padrao Ativado/Invisível) ---
     var_headless = tk.BooleanVar(value=True)
     chk_headless = ttk.Checkbutton(
         param_frame, 
@@ -966,15 +1104,17 @@ def criar_interface():
     btn_limpar_todos = ttk.Button(ctrl_sel_frame, text="Limpar Seleção", command=limpar_selecao, bootstyle="secondary", width=18)
     btn_limpar_todos.pack(side="right", fill="x", expand=True, padx=(5, 0))
 
-    # Grid de 1 coluna para exibição limpa dos 10 responsáveis
+    # Grid de 2 colunas para exibição otimizada, permitindo que novos responsáveis caibam elegantemente sem transbordar a interface
     grid_responsáveis = ttk.Frame(resp_frame)
     grid_responsáveis.pack(fill="both", expand=True)
     grid_responsáveis.columnconfigure(0, weight=1)
-    
+    grid_responsáveis.columnconfigure(1, weight=1)
 
     for indice, (nome, variavel) in enumerate(responsaveis_vars.items()):
+        linha = indice // 2
+        coluna = indice % 2
         chk_resp = ttk.Checkbutton(grid_responsáveis, text=nome, variable=variavel, bootstyle="info-round-toggle")
-        chk_resp.grid(row=indice, column=0, sticky="w", padx=10, pady=6)
+        chk_resp.grid(row=linha, column=coluna, sticky="w", padx=10, pady=6)
 
     # --- Painel Inferior de Execução (Barra de Progresso e Botões de Ação) ---
     bottom_frame = ttk.Frame(main_frame)
@@ -1096,7 +1236,7 @@ def executar_procedimento(usuario, senha, is_headless):
             atualizar_progresso("Aguardando download e processando...", step=4, total_steps=TOTAL_STEPS)
             df_final = processar_csv(diretorio_downloads, pdf_output_dir, selected_responsaveis)
 
-            if df_final is not None:
+            if df_final is not None and not df_final.empty:
                 if not execucao_ativa: break
                 atualizar_progresso("Gerando PDFs...", step=5, total_steps=TOTAL_STEPS)
                 salvar_pdf_por_responsavel(df_final, pdf_output_dir)
@@ -1107,7 +1247,7 @@ def executar_procedimento(usuario, senha, is_headless):
 
                 atualizar_progresso("Procedimento concluído com sucesso!", step=6, total_steps=TOTAL_STEPS)
             else:
-                atualizar_progresso("Processamento de dados falhou.", step=0, total_steps=1)
+                atualizar_progresso("Sem novos dados de contingência para gerar relatórios.", step=0, total_steps=1)
 
         except Exception as e:
             # --- GERADOR DE LOG DE ERRO ---
@@ -1120,7 +1260,6 @@ def executar_procedimento(usuario, senha, is_headless):
             atualizar_progresso(error_message, step=0, total_steps=1)
             
             try:
-                # Procura a área de trabalho da máquina (PT ou EN)
                 user_profile = os.path.expanduser("~")
                 desktop_paths = [
                     os.path.join(user_profile, "Desktop"),
